@@ -15,6 +15,7 @@ java {
 }
 
 repositories {
+    maven { url "https://repo.osgeo.org/repository/release/"}
     mavenCentral()
 }
 
@@ -30,6 +31,19 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-thymeleaf-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // GeoTools для работы с шейп-файлами
+    implementation group: 'org.geotools', name: 'gt-epsg-hsql', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-referencing', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-main', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-shapefile', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-geojson', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-api', version: '30.0'
+
+
+    // Jackson для JSON
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
     implementation 'org.projectlombok:lombok:1.18.38'
     annotationProcessor 'org.projectlombok:lombok:1.18.38'

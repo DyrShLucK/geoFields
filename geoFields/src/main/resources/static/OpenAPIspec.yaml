@@ -1,0 +1,160 @@
+openapi: 3.0.3
+info:
+  title: OpenApi specification для запросов
+  description: Title
+  version: 1.0.0
+servers:
+  - url: 'http://gateway-service:8080'
+paths:
+  /get_fields:
+    get:
+      summary: Получить все поля в формате GeoJSON
+      responses:
+        '200':
+          description: Успешный ответ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    example: FeatureCollection
+                  features:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { type: string, example: Feature }
+                        id: { type: integer, example: 1 }
+                        properties:
+                          type: object
+                          properties:
+                            id: { type: integer }
+                            name: { type: string }
+                            area: { type: number }
+                        geometry: { $ref: '#/components/schemas/GeoJSONGeometry' }
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /get_ndvi_by_id:
+    get:
+      summary: Получить тайлы NDVI для конкретного поля
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema: { type: string }
+          example: "1"
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+      responses:
+        '200':
+          description: URL тайл-сервиса
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    example: "https://earthengine.googleapis.com/.../tiles/{z}/{x}/{y}?token=..."
+        '404':
+          description: Поле не найдено
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /get_all_ndvi_tile:
+    get:
+      summary: Получить единый тайл-слой NDVI для всех полей
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+      responses:
+        '200':
+          description: URL тайл-сервиса
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url:
+                    type: string
+                    example: "https://earthengine.googleapis.com/.../tiles/{z}/{x}/{y}?token=..."
+        '404':
+          description: В базе нет полей
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+  /get_ndvi_value:
+    get:
+      summary: Получить значение NDVI в точке
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema: { type: number, format: float }
+          example: 55.75
+        - name: lon
+          in: query
+          required: true
+          schema: { type: number, format: float }
+          example: 37.62
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+      responses:
+        '200':
+          description: Значение NDVI
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      value: { type: number, nullable: true }
+                      msg: { type: string }
+                  - type: object
+                    properties:
+                      value: { type: number }
+        '500':
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        detail: { type: string }
+      example: { "detail": "Описание ошибки" }
+
+    GeoJSONGeometry:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [Point, LineString, Polygon, MultiPolygon]
+        coordinates:
+          type: array

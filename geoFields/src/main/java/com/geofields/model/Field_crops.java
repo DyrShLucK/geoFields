@@ -1,5 +1,6 @@
 package com.geofields.model;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -8,6 +9,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.Date;
 
 @Data
@@ -16,35 +18,33 @@ import java.util.Date;
 public class Field_crops {
     Long id;
 
+    @NotNull
+    @Valid
     Fields field;
 
+    @NotNull
+    @Valid
     Crops crop;
 
-    Date sowing_date;
+    LocalDate sowing_date;
 
-    Date harvest_date;
+    LocalDate harvest_date;
 
-    @NotNull
     @Digits(integer=10, fraction=2)
     BigDecimal sown_area_ha;
 
-    @NotNull
     @Digits(integer=10, fraction=2)
     BigDecimal harvest_area_ha;
 
-    @NotNull
     @Digits(integer=8, fraction=2)
     BigDecimal actual_yield;
 
-    @NotNull
     @Digits(integer=8, fraction=2)
     BigDecimal total_yield;
 
-    @NotNull
     @Digits(integer=8, fraction=2)
     BigDecimal planned_yield;
 
-    @NotNull
     @Digits(integer=8, fraction=2)
     BigDecimal forecasted_yield;
 

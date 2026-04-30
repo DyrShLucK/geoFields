@@ -14,10 +14,14 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 public class Fields {
     Long id;
+
     @Size(min=1, max=255)
     String field_name;
+
     @NotNull
     @Digits(integer=10, fraction=2)
     BigDecimal field_area;
+
+    @NotNull
     Polygon field_geometry;
 }
