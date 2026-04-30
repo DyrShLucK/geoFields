@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Агроситуация</title>
+
+    <link href='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css' rel='stylesheet' />
+    <script src='https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js'></script>
+
+    <link rel="stylesheet" href="../../../../../../../Downloads/Telegram%20Desktop/Agrosit/Agrosit/css/style.css">
+</head>
+<body>
+
+    <div class="side-panel">
+        <div class="brand">
+            <h2>Меню</h2>
+        </div>
+
+        <div class="control-section">
+            <label for="date-input">Дата анализа:</label>
+            <input type="date" id="date-input" value="2023-07-01">
+        </div>
+
+        <div class="button-group">
+            <button id="btn-update" class="btn primary">NDVI выбранного поля</button>
+            <button id="btn-update-all" class="btn secondary">NDVI всех полей</button>
+        </div>
+
+        <div id="status-bar" class="status-box">
+            Готов к работе. Выберите поле на карте.
+        </div>
+
+        <div class="legend">
+            <div class="legend-title">Шкала NDVI</div>
+            <div class="legend-bar"></div>
+            <div class="legend-labels">
+                <span>0.0</span>
+                <span>0.4</span>
+                <span>0.8+</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="layer-control">
+        <h4>Базовая карта</h4>
+        <label class="radio-item">
+            <input type="radio" name="base-layer" value="google" checked>
+            <span>Спутник Google</span>
+        </label>
+        <label class="radio-item">
+            <input type="radio" name="base-layer" value="osm">
+            <span>Схема (OSM)</span>
+        </label>
+
+        <h4>Слои данных</h4>
+        <label class="check-item">
+            <input type="checkbox" id="toggle-fields" checked>
+            <span>Границы полей</span>
+        </label>
+        <label class="check-item">
+            <input type="checkbox" id="toggle-ndvi" checked>
+            <span>Индекс NDVI</span>
+        </label>
+    </div>
+
+    <div id="map"></div>
+
+    <script src="../../../../../../../Downloads/Telegram%20Desktop/Agrosit/Agrosit/js/script.js"></script>
+
+</body>
+</html>
