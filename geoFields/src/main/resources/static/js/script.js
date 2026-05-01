@@ -1,4 +1,5 @@
-const API_URL = "http://127.0.0.1:8000";
+// Берем текущий origin, чтобы запросы шли в тот же домен/порт и не упирались в CORS.
+const API_URL = "";
 
 let selectedFieldDbId = null;
 let selectedMaplibreId = null;

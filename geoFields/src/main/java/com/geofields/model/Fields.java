@@ -6,7 +6,6 @@ import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.awt.Polygon;
 import java.math.BigDecimal;
 
 @Data
@@ -23,5 +22,6 @@ public class Fields {
     BigDecimal field_area;
 
     @NotNull
-    Polygon field_geometry;
+    // Храним геометрию как GeoJSON-строку (результат ST_AsGeoJSON).
+    String field_geometry;
 }

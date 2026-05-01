@@ -27,40 +27,6 @@ public class MainController {
 
     @GetMapping("/")
     public String mainPage(Model model) {
-        try {
-            // Получаем границы шейп-файла для начального зума
-            Map<String, Object> bounds = shapefileService.getShapefileBounds();
-            model.addAttribute("bounds", bounds);
-            return "map";
-        } catch (IOException e) {
-            model.addAttribute("error", "Ошибка загрузки шейп-файла: " + e.getMessage());
-            return "map";
-        }
+        return "index";
     }
-
-    @GetMapping("/api/shapefile")
-    @ResponseBody
-    public ResponseEntity<?> getShapefileAsGeoJSON() {
-        try {
-            String geoJSON = shapefileService.convertToGeoJSON();
-            return ResponseEntity.ok()
-                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
-                    .body(geoJSON);
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Ошибка чтения шейп-файла: " + e.getMessage()));
-        }
-    }
-
-    @GetMapping("/api/shapefile/bounds")
-    @ResponseBody
-    public ResponseEntity<?> getBounds() {
-        try {
-            return ResponseEntity.ok(shapefileService.getShapefileBounds());
-        } catch (IOException e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", "Ошибка получения границ: " + e.getMessage()));
-        }
-    }
-
 }
