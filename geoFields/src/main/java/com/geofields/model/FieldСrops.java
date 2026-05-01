@@ -10,12 +10,11 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.Date;
 
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-public class Field_crops {
+public class FieldСrops {
     Long id;
 
     @NotNull
@@ -56,4 +55,6 @@ public class Field_crops {
 
     @NotNull
     Integer crop_year;
+
+    private Organization organization;
 }
