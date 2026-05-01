@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,6 +15,13 @@
     <div class="side-panel">
         <div class="brand">
             <h2>Меню</h2>
+            <div style="font-size: 12px; opacity: 0.8;">
+                Заглушка входа: user #<span th:text="${stubUserId}">1</span>,
+                org #<span th:text="${stubOrgId}">1</span>
+            </div>
+            <div style="font-size: 12px; margin-top: 4px;">
+                <a href="/login">Вход</a> | <a href="/register">Регистрация</a>
+            </div>
         </div>
 
         <div class="control-section">
@@ -29,6 +36,10 @@
 
         <div id="status-bar" class="status-box">
             Готов к работе. Выберите поле на карте.
+        </div>
+
+        <div id="field-history" class="status-box" style="margin-top: 12px; max-height: 38vh; overflow-y: auto;">
+            История поля появится после выбора полигона.
         </div>
 
         <div class="legend">

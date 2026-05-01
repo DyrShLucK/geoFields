@@ -51,6 +51,9 @@ async function loadFields() {
     const statusBox = document.getElementById('status-bar');
     try {
         const response = await fetch(`${API_URL}/get_fields`);
+        if (!response.ok) {
+            throw new Error(`Ошибка загрузки полей: ${response.status}`);
+        }
         const data = await response.json();
 
         map.addSource('fields-source', {
@@ -86,14 +89,13 @@ async function loadFields() {
         if (data.features.length > 0) {
             const bounds = new maplibregl.LngLatBounds();
             data.features.forEach(f => {
-                const coords = f.geometry.type === 'Polygon' ? f.geometry.coordinates[0] : f.geometry.coordinates[0][0];
-                coords.forEach(c => bounds.extend(c));
+                expandBounds(bounds, f.geometry);
             });
             map.fitBounds(bounds, { padding: 50 });
         }
         statusBox.innerText = "Поля загружены";
     } catch (err) {
-        statusBox.innerText = "Ошибка БД";
+        statusBox.innerText = "Ошибка загрузки полей";
     }
 }
 
@@ -122,6 +124,7 @@ map.on('click', 'fields-fill', (e) => {
     if (e.features.length > 0) {
         const feature = e.features[0];
         const props = feature.properties;
+        const history = normalizeHistory(props.history);
 
         if (selectedMaplibreId !== null) {
             map.setFeatureState({ source: 'fields-source', id: selectedMaplibreId }, { selected: false });
@@ -135,9 +138,11 @@ map.on('click', 'fields-fill', (e) => {
             <div style="line-height: 1.6">
                 <strong>Поле:</strong> ${props.name || 'Без имени'}<br>
                 <strong>ID:</strong> ${props.id}<br>
-                <strong>Площадь:</strong> ${props.area || '--'} га
+                <strong>Площадь:</strong> ${formatNumber(props.area)} га<br>
+                <strong>Записей истории:</strong> ${history.length}
             </div>
         `;
+        renderHistory(history);
 
         new maplibregl.Popup({ closeButton: true, className: 'custom-popup' })
             .setLngLat(e.lngLat)
@@ -145,14 +150,13 @@ map.on('click', 'fields-fill', (e) => {
                 <div style="padding: 5px; color: #333;">
                     <h3 style="margin: 0 0 5px 0; font-size: 14px;">${props.name || 'Поле'}</h3>
                     <p style="margin: 0; font-size: 12px;">
-                        Площадь: <b>${props.area || '--'} га</b><br>
-                        ID: ${props.id}
+                        Площадь: <b>${formatNumber(props.area)} га</b><br>
+                        ID: ${props.id}<br>
+                        История: ${history.length} записей
                     </p>
                 </div>
             `)
             .addTo(map);
-
-        console.log("Выбраны данные:", props);
     }
 });
 
@@ -194,3 +198,63 @@ function addNdviToMap(url, label) {
 
 document.getElementById('btn-update').addEventListener('click', updateNDVI);
 document.getElementById('btn-update-all').addEventListener('click', updateAllNDVI);
+
+function expandBounds(bounds, geometry) {
+    if (!geometry || !geometry.coordinates) return;
+
+    if (geometry.type === 'Polygon') {
+        geometry.coordinates[0].forEach(coord => bounds.extend(coord));
+        return;
+    }
+
+    if (geometry.type === 'MultiPolygon') {
+        geometry.coordinates.forEach(polygon => {
+            polygon[0].forEach(coord => bounds.extend(coord));
+        });
+    }
+}
+
+function normalizeHistory(rawHistory) {
+    if (!rawHistory) return [];
+    if (Array.isArray(rawHistory)) return rawHistory;
+
+    try {
+        const parsed = JSON.parse(rawHistory);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function renderHistory(history) {
+    const historyBox = document.getElementById('field-history');
+    if (history.length === 0) {
+        historyBox.innerHTML = "По этому полю пока нет истории.";
+        return;
+    }
+
+    const html = history.map((item, index) => {
+        return `
+            <div style="padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.2); line-height: 1.5;">
+                <strong>Запись ${index + 1}</strong><br>
+                Год: ${item.cropYear ?? '--'}<br>
+                Культура: ${item.cropName ?? '--'}<br>
+                Посев: ${item.sowingDate ?? '--'}<br>
+                Уборка: ${item.harvestDate ?? '--'}<br>
+                Факт. урожайность: ${formatNumber(item.actualYield)}<br>
+                План. урожайность: ${formatNumber(item.plannedYield)}<br>
+                Дата последней анадитики: ${item.analyticsDate ?? '--'}<br>
+                NDVI URL: ${item.ndviUrl ? `<a href="${item.ndviUrl}" target="_blank" rel="noopener noreferrer">открыть</a>` : '--'}
+            </div>
+        `;
+    }).join('');
+
+    historyBox.innerHTML = html;
+}
+
+function formatNumber(value) {
+    if (value === null || value === undefined || value === '') return '--';
+    const num = Number(value);
+    if (Number.isNaN(num)) return '--';
+    return num.toFixed(2);
+}

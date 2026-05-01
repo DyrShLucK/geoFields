@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f2f4f8; margin: 0; }
+        .wrap { max-width: 420px; margin: 80px auto; background: #fff; padding: 24px; border-radius: 12px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+        h1 { margin-top: 0; font-size: 24px; }
+        .hint { color: #666; font-size: 14px; margin-bottom: 16px; }
+        input { width: 100%; padding: 10px; margin: 8px 0 14px; border: 1px solid #ccd3df; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: #2f80ed; color: white; cursor: pointer; }
+        .links { margin-top: 14px; text-align: center; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <h1>Вход</h1>
+    <div class="hint">Пока заглушка: после отправки вы просто переходите в приложение.</div>
+    <form method="post" action="/login">
+        <label for="login">Логин</label>
+        <input id="login" name="login" required />
+
+        <label for="password">Пароль</label>
+        <input id="password" name="password" type="password" required />
+
+        <button type="submit">Войти</button>
+    </form>
+    <div class="links">
+        Нет аккаунта? <a href="/register">Зарегистрироваться</a>
+    </div>
+</div>
+</body>
+</html>

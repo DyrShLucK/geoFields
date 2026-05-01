@@ -16,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,7 +48,7 @@ class FieldControllerWebTest {
                         new FieldFeatureDto(
                                 "Feature",
                                 1L,
-                                new FieldFeaturePropertiesDto(1L, "Field A", new BigDecimal("11.20")),
+                                new FieldFeaturePropertiesDto(1L, "Field A", new BigDecimal("11.20"), Collections.emptyList()),
                                 geometry
                         )
                 )
