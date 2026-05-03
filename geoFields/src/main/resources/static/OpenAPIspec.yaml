@@ -1,31 +1,69 @@
 openapi: 3.0.3
 info:
-  title: GeoFields API
-  description: API для получения полей, их истории и NDVI-данных.
-  version: 1.1.0
+  title: GeoFields HTTP API
+  description: |
+    JSON-эндпоинты бэкенда GeoFields (поля, NDVI, менеджер организации).
+
+    **Авторизация:** сессия Spring Security (форма логина). Запросы с браузера отправляйте с `credentials: include` / same-origin cookie.
+
+    **CSRF:** для `POST` используется cookie `XSRF-TOKEN` и заголовок `X-XSRF-TOKEN` (см. Spring `CookieCsrfTokenRepository`).
+
+    Главная `/` отдаёт HTML без данных пользователя; контекст сессии — `GET /api/session/context`.
+
+    HTML-страницы (`/`, `/login`, `/register`, `/org/manager`, `/org/admin`) как разметка в спецификации не описаны.
+  version: 1.4.2
 
 servers:
   - url: http://localhost:8080
-    description: Local backend
+    description: Локальный сервер (см. `server.port` в application.properties)
 
 tags:
   - name: Fields
+    description: Поля и история в формате GeoJSON
   - name: NDVI
+    description: Заглушки тайлов и значения NDVI
+  - name: OrgManager
+    description: Менеджер организации (роли ORG_MANAGER, ORG_ADMIN)
+  - name: OrgAdmin
+    description: Администрирование пользователей организации (только ORG_ADMIN)
+  - name: Session
+    description: Сессия и контекст пользователя для SPA-частей UI
 
 paths:
+  /api/session/context:
+    get:
+      tags: [Session]
+      summary: Контекст текущего пользователя (ФИО, роль, org id, CSRF для выхода)
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Авторизованный пользователь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionContext"
+        "401":
+          description: Нет сессии
+
   /get_fields:
     get:
       tags: [Fields]
-      summary: Получить поля GeoJSON вместе с историей
+      summary: Список полей организации текущего пользователя
+      description: GeoJSON FeatureCollection; в properties у каждого поля — история посевов.
+      security:
+        - sessionCookie: []
       responses:
         "200":
-          description: GeoJSON FeatureCollection
+          description: Успех
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FieldFeatureCollection"
+        "401":
+          description: Не авторизован
         "500":
-          description: Ошибка сервера
+          description: Ошибка сервера / БД
           content:
             application/json:
               schema:
@@ -34,114 +72,252 @@ paths:
   /get_ndvi_by_id:
     get:
       tags: [NDVI]
-      summary: Получить URL тайлов NDVI для конкретного поля
+      summary: URL растрового слоя NDVI для одного поля
+      security:
+        - sessionCookie: []
       parameters:
-        - in: query
-          name: field_id
+        - name: field_id
+          in: query
           required: true
           schema:
             type: string
           example: "1"
-        - in: query
-          name: date
+        - name: date
+          in: query
           required: true
+          description: Дата снимка (строка, как на фронте)
           schema:
             type: string
-            format: date
           example: "2024-06-15"
       responses:
         "200":
-          description: URL тайл-сервиса
+          description: Объект с полем url — шаблон тайлов `{z}/{x}/{y}`
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NdviTileResponse"
+                $ref: "#/components/schemas/NdviTileUrlResponse"
+        "400":
+          description: Некорректный field_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии или не задана организация
         "404":
-          description: Поле не найдено
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Поле не принадлежит организации пользователя
 
   /get_all_ndvi_tile:
     get:
       tags: [NDVI]
-      summary: Получить единый слой NDVI для всех полей
+      summary: Один слой NDVI по всем полям организации
+      security:
+        - sessionCookie: []
       parameters:
-        - in: query
-          name: date
+        - name: date
+          in: query
           required: true
           schema:
             type: string
-            format: date
           example: "2024-06-15"
       responses:
         "200":
-          description: URL тайл-сервиса
+          description: url, organizationId, date
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NdviTileResponse"
-        "404":
-          description: В базе нет полей
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
-          description: Ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/NdviOrgTileResponse"
+        "401":
+          description: Не авторизован
 
   /get_ndvi_value:
     get:
       tags: [NDVI]
-      summary: Получить значение NDVI в точке
+      summary: Значение NDVI в точке (заглушка)
+      security:
+        - sessionCookie: []
       parameters:
-        - in: query
-          name: lat
+        - name: lat
+          in: query
           required: true
           schema:
             type: number
-            format: float
+            format: double
           example: 55.75
-        - in: query
-          name: lon
+        - name: lon
+          in: query
           required: true
           schema:
             type: number
-            format: float
+            format: double
           example: 37.62
-        - in: query
-          name: date
+        - name: date
+          in: query
           required: true
           schema:
             type: string
-            format: date
           example: "2024-06-15"
       responses:
         "200":
-          description: Значение NDVI (или сообщение при отсутствии снимка)
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/NdviValueResponse"
-        "500":
-          description: Ошибка сервера
+
+  /api/org/manager/summary:
+    get:
+      tags: [OrgManager]
+      summary: Сводка для UI менеджера (заявки, приглашения, CSRF)
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/OrgManagerSummary"
+        "403":
+          description: Нет роли менеджера / админа
+
+  /api/org/manager/approve:
+    post:
+      tags: [OrgManager]
+      summary: Принять заявку на регистрацию
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+        "403":
+          description: Запрещено
+
+  /api/org/manager/reject:
+    post:
+      tags: [OrgManager]
+      summary: Отклонить заявку
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/manager/invite:
+    post:
+      tags: [OrgManager]
+      summary: Создать одноразовое приглашение
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+            example: {}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteCreated"
+
+  /api/org/manager/revoke-invite:
+    post:
+      tags: [OrgManager]
+      summary: Отозвать приглашение по токену
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/admin/summary:
+    get:
+      tags: [OrgAdmin]
+      summary: Список пользователей организации и CSRF для UI админа
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOrgSummary"
+        "403":
+          description: Нужна роль ORG_ADMIN
+
+  /api/org/admin/role:
+    post:
+      tags: [OrgAdmin]
+      summary: Назначить роль пользователю организации
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdateRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/admin/delete:
+    post:
+      tags: [OrgAdmin]
+      summary: Удалить пользователя из организации
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
 
 components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Сессия после входа через POST /login
+
   schemas:
     FieldFeatureCollection:
       type: object
@@ -165,7 +341,6 @@ components:
         id:
           type: integer
           format: int64
-          example: 1
         properties:
           $ref: "#/components/schemas/FieldProperties"
         geometry:
@@ -178,14 +353,11 @@ components:
         id:
           type: integer
           format: int64
-          example: 1
         name:
           type: string
-          example: "10/89 озимая пшеница"
         area:
           type: number
           format: double
-          example: 88.58
         history:
           type: array
           items:
@@ -207,35 +379,27 @@ components:
           nullable: true
         sowingDate:
           type: string
-          format: date
           nullable: true
         harvestDate:
           type: string
-          format: date
           nullable: true
         sownAreaHa:
           type: number
-          format: double
           nullable: true
         harvestAreaHa:
           type: number
-          format: double
           nullable: true
         actualYield:
           type: number
-          format: double
           nullable: true
         totalYield:
           type: number
-          format: double
           nullable: true
         plannedYield:
           type: number
-          format: double
           nullable: true
         forecastedYield:
           type: number
-          format: double
           nullable: true
         sourceData:
           type: string
@@ -248,14 +412,12 @@ components:
           nullable: true
         analyticsDate:
           type: string
-          format: date
           nullable: true
         ndviUrl:
           type: string
           nullable: true
         ndviCreatedAt:
           type: string
-          format: date-time
           nullable: true
 
     GeoJSONGeometry:
@@ -265,19 +427,28 @@ components:
         type:
           type: string
           enum: [Point, LineString, Polygon, MultiPolygon]
-        coordinates:
-          description: GeoJSON coordinates
-          oneOf:
-            - type: array
-            - type: object
+        coordinates: {}
 
-    NdviTileResponse:
+    NdviTileUrlResponse:
       type: object
       required: [url]
       properties:
         url:
           type: string
-          example: "https://earthengine.googleapis.com/.../tiles/{z}/{x}/{y}?token=..."
+          description: URL шаблон с плейсхолдерами {z}/{x}/{y}
+          example: "https://example.com/tiles/{z}/{x}/{y}"
+
+    NdviOrgTileResponse:
+      type: object
+      required: [url, organizationName, date]
+      properties:
+        url:
+          type: string
+        organizationName:
+          type: string
+          description: Название организации из справочника (может быть пустой строкой)
+        date:
+          type: string
 
     NdviValueResponse:
       type: object
@@ -290,10 +461,212 @@ components:
           type: string
           nullable: true
 
+    SimpleError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Некорректный field_id"
+
     ErrorResponse:
       type: object
-      required: [detail]
       properties:
         detail:
           type: string
           example: "Описание ошибки"
+
+    SessionContext:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+          description: Название организации для отображения
+        login:
+          type: string
+        fullName:
+          type: string
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        admin:
+          type: boolean
+        orgManager:
+          type: boolean
+        agronomist:
+          type: boolean
+        role:
+          type: string
+        roleLabel:
+          type: string
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    OrgManagerSummary:
+      type: object
+      required: [organizationId, organizationName, currentLogin, pending, invites, csrf]
+      properties:
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+        currentLogin:
+          type: string
+        currentUserFullName:
+          type: string
+          description: ФИО для отображения; при отсутствии данных — логин
+        pending:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingRegistrationItem"
+        invites:
+          type: array
+          items:
+            $ref: "#/components/schemas/InviteLinkItem"
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    PendingRegistrationItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        login:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    InviteLinkItem:
+      type: object
+      properties:
+        token:
+          type: string
+        registerUrl:
+          type: string
+          description: Относительный путь, напр. /register?ref=...
+
+    CsrfInfo:
+      type: object
+      nullable: true
+      properties:
+        parameterName:
+          type: string
+          nullable: true
+        headerName:
+          type: string
+          nullable: true
+          example: "X-XSRF-TOKEN"
+        token:
+          type: string
+          nullable: true
+
+    ActionResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+
+    InviteCreated:
+      type: object
+      properties:
+        token:
+          type: string
+        registerUrl:
+          type: string
+        message:
+          type: string
+
+    UserIdRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: integer
+          format: int64
+
+    RoleUpdateRequest:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        role:
+          type: string
+          description: USER | AGRONOMIST | ORG_MANAGER | ORG_ADMIN
+          enum: [USER, AGRONOMIST, ORG_MANAGER, ORG_ADMIN]
+
+    OrgMemberItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        login:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        roleLabel:
+          type: string
+        registrationStatus:
+          type: string
+        active:
+          type: boolean
+        currentUser:
+          type: boolean
+
+    AdminOrgSummary:
+      type: object
+      required: [organizationId, organizationName, currentLogin, members, csrf]
+      properties:
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+        currentLogin:
+          type: string
+        currentUserFullName:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgMemberItem"
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    TokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string

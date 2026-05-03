@@ -25,7 +25,7 @@ public class User {
     private String email;
 
     @NotBlank
-    @Size(min = 60, max = 255) // bcrypt/argon2 хэш ~60 символов
+    @Size(min = 60, max = 255) 
     private String passwordHash;
 
     private Boolean isActive;
@@ -34,4 +34,7 @@ public class User {
 
     @NotNull
     private Organization organization;
+
+    @NotNull
+    private String role;
 }

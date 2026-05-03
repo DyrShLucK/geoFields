@@ -3,8 +3,6 @@ package com.geofields.service;
 import com.geofields.dto.FieldFeatureCollectionDto;
 import com.geofields.dto.FieldFeatureDto;
 import com.geofields.exception.FieldDataAccessException;
-import com.geofields.repository.FieldRepository;
-import com.geofields.repository.FieldHistoryRow;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -22,45 +20,59 @@ import static org.mockito.Mockito.when;
 class FieldGeoJsonServiceTest {
 
     @Mock
-    private FieldRepository fieldRepository;
+    private AuthContextService authContextService;
     @Mock
-    private StubAuthContextService stubAuthContextService;
+    private FieldGeoJsonQueryService fieldGeoJsonQueryService;
 
     @Test
-    void getFieldsAsFeatureCollection_returnsOpenApiCompatibleGeoJson() {
-        FieldGeoJsonService service = new FieldGeoJsonService(fieldRepository, stubAuthContextService);
-        when(stubAuthContextService.getCurrentOrganizationId()).thenReturn(1L);
-        // Обычный успешный сценарий: одна запись из БД превращается в один Feature.
-        when(fieldRepository.findAllFieldsWithHistory(1L)).thenReturn(List.of(
-                new FieldHistoryRow(
-                        1L,
-                        "Field A",
-                        new BigDecimal("44.50"),
-                        "{\"type\":\"Polygon\",\"coordinates\":[[[37.0,55.0],[37.1,55.0],[37.1,55.1],[37.0,55.0]]]}",
-                        101L,
-                        7L,
-                        "Wheat",
-                        java.time.LocalDate.parse("2024-03-10"),
-                        java.time.LocalDate.parse("2024-08-20"),
-                        new BigDecimal("44.50"),
-                        new BigDecimal("44.40"),
-                        new BigDecimal("5.20"),
-                        new BigDecimal("230.88"),
-                        new BigDecimal("5.10"),
-                        new BigDecimal("5.30"),
-                        "satellite",
-                        "spring sowing",
-                        2024,
-                        java.time.LocalDate.parse("2024-06-15"),
-                        "https://tiles.example/{z}/{x}/{y}",
-                        java.time.LocalDateTime.parse("2024-06-15T12:00:00")
+    void getFieldsAsFeatureCollection_returnsOpenApiCompatibleGeoJson() throws Exception {
+        FieldGeoJsonService service = new FieldGeoJsonService(authContextService, fieldGeoJsonQueryService);
+        when(authContextService.getCurrentOrganizationId()).thenReturn(1L);
+        when(fieldGeoJsonQueryService.loadForOrganization(1L)).thenReturn(
+                new FieldFeatureCollectionDto(
+                        "FeatureCollection",
+                        List.of(
+                                new FieldFeatureDto(
+                                        "Feature",
+                                        1L,
+                                        new com.geofields.dto.FieldFeaturePropertiesDto(
+                                                1L,
+                                                "Field A",
+                                                new BigDecimal("44.50"),
+                                                List.of(
+                                                        new com.geofields.dto.FieldHistoryItemDto(
+                                                                101L,
+                                                                7L,
+                                                                "Wheat",
+                                                                java.time.LocalDate.parse("2024-03-10"),
+                                                                java.time.LocalDate.parse("2024-08-20"),
+                                                                new BigDecimal("44.50"),
+                                                                new BigDecimal("44.40"),
+                                                                new BigDecimal("5.20"),
+                                                                new BigDecimal("230.88"),
+                                                                new BigDecimal("5.10"),
+                                                                new BigDecimal("5.30"),
+                                                                "satellite",
+                                                                "spring sowing",
+                                                                2024,
+                                                                java.time.LocalDate.parse("2024-06-15"),
+                                                                "https://tiles.example/{z}/{x}/{y}",
+                                                                java.time.LocalDateTime.parse("2024-06-15T12:00:00")
+                                                        )
+                                                )
+                                        ),
+                                        new com.geofields.dto.GeoJsonGeometryDto(
+                                                "Polygon",
+                                                "[[[37.0,55.0],[37.1,55.0],[37.1,55.1],[37.0,55.0]]]"
+                                        )
+                                )
+                        )
                 )
-        ));
+        );
 
         FieldFeatureCollectionDto result = service.getFieldsAsFeatureCollection();
         FieldFeatureDto feature = result.features().getFirst();
 
-        // Проверяем структуру ответа и ключевые поля OpenAPI.
         assertThat(result.type()).isEqualTo("FeatureCollection");
         assertThat(result.features()).hasSize(1);
         assertThat(feature.type()).isEqualTo("Feature");
@@ -72,15 +84,15 @@ class FieldGeoJsonServiceTest {
         assertThat(feature.properties().history().getFirst().cropName()).isEqualTo("Wheat");
         assertThat(feature.properties().history().getFirst().ndviUrl()).contains("tiles.example");
         assertThat(feature.geometry().type()).isEqualTo("Polygon");
-        assertThat(feature.geometry().coordinates()).isInstanceOf(List.class);
+        assertThat(feature.geometry().coordinates()).startsWith("[[[");
     }
 
     @Test
     void getFieldsAsFeatureCollection_wrapsDatabaseExceptions() {
-        FieldGeoJsonService service = new FieldGeoJsonService(fieldRepository, stubAuthContextService);
-        when(stubAuthContextService.getCurrentOrganizationId()).thenReturn(1L);
-        // Ошибка базы должна превратиться в нашу доменную ошибку сервиса.
-        when(fieldRepository.findAllFieldsWithHistory(1L)).thenThrow(new DataAccessResourceFailureException("db down"));
+        FieldGeoJsonService service = new FieldGeoJsonService(authContextService, fieldGeoJsonQueryService);
+        when(authContextService.getCurrentOrganizationId()).thenReturn(1L);
+        when(fieldGeoJsonQueryService.loadForOrganization(1L))
+                .thenThrow(new DataAccessResourceFailureException("db down"));
 
         assertThatThrownBy(service::getFieldsAsFeatureCollection)
                 .isInstanceOf(FieldDataAccessException.class)
@@ -89,35 +101,21 @@ class FieldGeoJsonServiceTest {
     }
 
     @Test
-    void getFieldsAsFeatureCollection_throwsWhenGeometryJsonIsInvalid() {
-        FieldGeoJsonService service = new FieldGeoJsonService(fieldRepository, stubAuthContextService);
-        when(stubAuthContextService.getCurrentOrganizationId()).thenReturn(1L);
-        // Если в geom невалидный JSON — сервис должен упасть с понятным сообщением.
-        when(fieldRepository.findAllFieldsWithHistory(1L)).thenReturn(List.of(
-                new FieldHistoryRow(
-                        1L,
-                        "Broken field",
-                        new BigDecimal("1.00"),
-                        "not-a-json",
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null,
-                        null
-                )
-        ));
+    void getFieldsAsFeatureCollection_throwsWhenOrganizationMissingForUser() {
+        FieldGeoJsonService service = new FieldGeoJsonService(authContextService, fieldGeoJsonQueryService);
+        when(authContextService.getCurrentOrganizationId()).thenReturn(null);
+
+        assertThatThrownBy(service::getFieldsAsFeatureCollection)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("организац");
+    }
+
+    @Test
+    void getFieldsAsFeatureCollection_propagatesIllegalStateFromQueryLayer() {
+        FieldGeoJsonService service = new FieldGeoJsonService(authContextService, fieldGeoJsonQueryService);
+        when(authContextService.getCurrentOrganizationId()).thenReturn(1L);
+        when(fieldGeoJsonQueryService.loadForOrganization(1L))
+                .thenThrow(new IllegalStateException("Некорректная геометрия в БД"));
 
         assertThatThrownBy(service::getFieldsAsFeatureCollection)
                 .isInstanceOf(IllegalStateException.class)

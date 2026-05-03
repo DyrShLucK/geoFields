@@ -58,6 +58,14 @@ public class JdbcFieldRepository implements FieldRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    private static final String FIELD_BELONGS_TO_ORG_SQL = """
+            SELECT EXISTS (
+                SELECT 1 FROM field_crops fc
+                WHERE fc.field_id = ? AND fc.organization_id = ?
+                LIMIT 1
+            )
+            """;
+
     // Отдаем плоский список строк, сервис сгруппирует их по полю.
     @Override
     public List<FieldHistoryRow> findAllFieldsWithHistory(Long organizationId) {
@@ -71,8 +79,22 @@ public class JdbcFieldRepository implements FieldRepository {
         }
     }
 
+    @Override
+    public boolean fieldBelongsToOrganization(Long fieldId, Long organizationId) {
+        Boolean exists = jdbcTemplate.queryForObject(
+                FIELD_BELONGS_TO_ORG_SQL,
+                Boolean.class,
+                fieldId,
+                organizationId);
+        return Boolean.TRUE.equals(exists);
+    }
+
     private List<FieldHistoryRow> queryWithHistory(String sql, Long organizationId) {
-        return jdbcTemplate.query(sql, ps -> ps.setLong(1, organizationId), (rs, rowNum) -> new FieldHistoryRow(
+        return jdbcTemplate.query(sql, ps -> ps.setLong(1, organizationId), (rs, rowNum) -> mapHistoryRow(rs));
+    }
+
+    private FieldHistoryRow mapHistoryRow(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new FieldHistoryRow(
                 rs.getLong("field_id"),
                 rs.getString("field_name"),
                 rs.getBigDecimal("field_area"),
@@ -94,7 +116,7 @@ public class JdbcFieldRepository implements FieldRepository {
                 rs.getObject("analytics_date", java.time.LocalDate.class),
                 rs.getString("ndvi_url"),
                 rs.getObject("ndvi_created_at", java.time.LocalDateTime.class)
-        ));
+        );
     }
 
     private Long toLong(Object value) {

@@ -14,7 +14,6 @@ public class FieldController {
         this.fieldGeoJsonService = fieldGeoJsonService;
     }
 
-    // Основная ручка: отдаем поля как GeoJSON FeatureCollection по OpenAPI.
     @GetMapping("/get_fields")
     public FieldFeatureCollectionDto getFields() {
         return fieldGeoJsonService.getFieldsAsFeatureCollection();

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,12 +15,27 @@
     <div class="side-panel">
         <div class="brand">
             <h2>Меню</h2>
-            <div style="font-size: 12px; opacity: 0.8;">
-                Заглушка входа: user #<span th:text="${stubUserId}">1</span>,
-                org #<span th:text="${stubOrgId}">1</span>
+            <div id="user-panel" style="display: none; font-size: 12px; opacity: 0.8; line-height: 1.5;">
+                <strong id="user-fullname">—</strong>
+                <span> · </span><span id="user-role-label">—</span><br>
+                <span>Фамилия:</span> <span id="user-last-name">—</span><br>
+                <span>Имя:</span> <span id="user-first-name">—</span><br>
+                <span>Отчество:</span> <span id="user-middle-name">—</span><br>
+                <span>Логин:</span> <span id="user-login">—</span><br>
+                user id <span id="user-id">—</span><br>
+                <span>Организация:</span> <span id="user-org-name">—</span>
             </div>
-            <div style="font-size: 12px; margin-top: 4px;">
-                <a href="/login">Вход</a> | <a href="/register">Регистрация</a>
+            <div id="user-logout-wrap" style="display: none; font-size: 12px; margin-top: 6px;">
+                <form id="logout-form" action="/logout" method="post" style="display: inline;">
+                    <input type="hidden" id="logout-csrf-param" name="_csrf" value=""/>
+                    <button type="submit" style="background: none; border: none; color: inherit; cursor: pointer; text-decoration: underline; padding: 0; font-size: 12px;">Выйти</button>
+                </form>
+            </div>
+            <div id="link-org-manager" style="display: none; font-size: 12px; margin-top: 8px;">
+                <a href="/org/manager" style="color: inherit;">Заявки и приглашения (менеджер)</a>
+            </div>
+            <div id="link-org-admin" style="display: none; font-size: 12px; margin-top: 6px;">
+                <a href="/org/admin" style="color: inherit;">Пользователи организации (админ)</a>
             </div>
         </div>
 
@@ -30,8 +45,8 @@
         </div>
 
         <div class="button-group">
-            <button id="btn-update" class="btn primary">NDVI выбранного поля</button>
-            <button id="btn-update-all" class="btn secondary">NDVI всех полей</button>
+            <button id="btn-update" type="button" class="btn primary">NDVI выбранного поля</button>
+            <button id="btn-update-all" type="button" class="btn secondary">NDVI всех полей организации</button>
         </div>
 
         <div id="status-bar" class="status-box">

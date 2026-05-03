@@ -35,11 +35,9 @@ class FieldControllerWebTest {
 
     @Test
     void getFields_returnsFeatureCollection() throws Exception {
-        // Готовим ответ сервиса и проверяем, что контроллер его просто прокидывает наружу.
         GeoJsonGeometryDto geometry = new GeoJsonGeometryDto(
                 "Polygon",
-                new com.fasterxml.jackson.databind.ObjectMapper()
-                        .readTree("[[[37.0,55.0],[37.1,55.0],[37.1,55.1],[37.0,55.0]]]")
+                "[[[37.0,55.0],[37.1,55.0],[37.1,55.1],[37.0,55.0]]]"
         );
 
         FieldFeatureCollectionDto response = new FieldFeatureCollectionDto(
@@ -58,7 +56,6 @@ class FieldControllerWebTest {
 
         FieldFeatureCollectionDto result = fieldController.getFields();
 
-        // Минимальные проверки контракта ответа.
         assertThat(result.type()).isEqualTo("FeatureCollection");
         assertThat(result.features()).hasSize(1);
         assertThat(result.features().getFirst().properties().name()).isEqualTo("Field A");
@@ -67,7 +64,6 @@ class FieldControllerWebTest {
 
     @Test
     void handleFieldDataAccessException_returns500AndDetail() {
-        // Проверяем формат обработки ошибки БД в advice-классе.
         FieldDataAccessException exception =
                 new FieldDataAccessException("Ошибка чтения полей из БД", new RuntimeException("db"));
 
@@ -80,7 +76,6 @@ class FieldControllerWebTest {
 
     @Test
     void handleIllegalStateException_returns500AndDetail() {
-        // Проверяем формат ошибки при невалидной геометрии.
         IllegalStateException exception = new IllegalStateException("Некорректная геометрия в БД");
 
         ResponseEntity<?> response = apiExceptionHandler.handleIllegalStateException(exception);

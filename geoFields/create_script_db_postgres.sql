@@ -46,18 +46,38 @@ CREATE TABLE fields (
 -- ============================================
 CREATE TABLE users (
                        id SERIAL PRIMARY KEY,
-                       login VARCHAR(100) NOT NULL,
+                       login VARCHAR(100) NOT NULL UNIQUE,
                        email VARCHAR(255) NOT NULL UNIQUE,
                        password_hash VARCHAR(255) NOT NULL,
                        is_active BOOLEAN DEFAULT TRUE,
                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                        organization_id INTEGER NOT NULL,
+                       role VARCHAR(32) NOT NULL DEFAULT 'USER'
+                           CHECK (role IN ('USER', 'AGRONOMIST', 'ORG_MANAGER', 'ORG_ADMIN')),
+                       registration_status VARCHAR(20) NOT NULL DEFAULT 'APPROVED'
+                           CHECK (registration_status IN ('PENDING', 'APPROVED', 'REJECTED')),
+                       last_name VARCHAR(100) NOT NULL DEFAULT '',
+                       first_name VARCHAR(100) NOT NULL DEFAULT '',
+                       middle_name VARCHAR(100) NOT NULL DEFAULT '',
 
                        CONSTRAINT fk_users_organization
                            FOREIGN KEY (organization_id)
                                REFERENCES organizations(id)
                                ON DELETE CASCADE
 );
+
+CREATE TABLE org_registration_invites (
+    id SERIAL PRIMARY KEY,
+    organization_id INTEGER NOT NULL REFERENCES organizations (id) ON DELETE CASCADE,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by_user_id INTEGER REFERENCES users (id) ON DELETE SET NULL,
+    revoked BOOLEAN NOT NULL DEFAULT FALSE,
+    consumed_at TIMESTAMP NULL
+);
+
+CREATE INDEX idx_org_invites_org ON org_registration_invites (organization_id);
+CREATE INDEX idx_org_invites_token ON org_registration_invites (token) WHERE NOT revoked AND consumed_at IS NULL;
 
 -- ============================================
 -- 5. ИСТОРИЯ ПОСЕВОВ (FIELD_CROPS)

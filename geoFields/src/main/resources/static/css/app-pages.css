@@ -1,0 +1,184 @@
+/**
+ * Общие стили для страниц приложения (всё кроме index — там свой style.css).
+ * Уточнения под конкретную страницу — в <style> в шаблоне.
+ */
+
+/* --- Авторизация: login, register --- */
+body.geo-page-auth {
+    font-family: system-ui, sans-serif;
+    background: #f2f4f8;
+    margin: 0;
+}
+
+body.geo-page-auth .wrap {
+    max-width: 420px;
+    margin: 80px auto;
+    background: #fff;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+body.geo-page-auth .wrap h1 {
+    margin-top: 0;
+    font-size: 24px;
+}
+
+body.geo-page-auth .hint {
+    color: #666;
+    font-size: 14px;
+    margin-bottom: 16px;
+}
+
+body.geo-page-auth .hint.ok,
+body.geo-page-auth .ok {
+    color: #1e7b34;
+}
+
+body.geo-page-auth .hint.err,
+body.geo-page-auth .err {
+    color: #c0392b;
+}
+
+body.geo-page-auth .err {
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+body.geo-page-auth label {
+    display: block;
+    font-size: 14px;
+}
+
+body.geo-page-auth .wrap input {
+    width: 100%;
+    padding: 10px;
+    margin: 8px 0 14px;
+    border: 1px solid #ccd3df;
+    border-radius: 8px;
+    box-sizing: border-box;
+}
+
+body.geo-page-auth .wrap button {
+    width: 100%;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    cursor: pointer;
+}
+
+body.geo-page-auth .links {
+    margin-top: 14px;
+    text-align: center;
+    font-size: 14px;
+}
+
+body.geo-page-auth a {
+    color: #1a5fb4;
+}
+
+/* --- Менеджер / админ организации --- */
+body.geo-page-org {
+    font-family: system-ui, sans-serif;
+    max-width: 760px;
+    margin: 24px auto;
+    padding: 0 16px;
+    background: #f2f4f8;
+}
+
+body.geo-page-org h1 {
+    font-size: 1.25rem;
+    margin-top: 0;
+}
+
+body.geo-page-org h2 {
+    font-size: 1.05rem;
+    margin-top: 1.5rem;
+}
+
+body.geo-page-org table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 12px 0;
+    background: #fff;
+}
+
+body.geo-page-org th,
+body.geo-page-org td {
+    border: 1px solid #ccd3df;
+    padding: 8px;
+    text-align: left;
+    font-size: 14px;
+}
+
+body.geo-page-org button {
+    padding: 6px 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid #889;
+    background: #fff;
+}
+
+body.geo-page-org button.primary {
+    background: #27ae60;
+    color: #fff;
+    border-color: #1e8449;
+}
+
+body.geo-page-org button.danger {
+    color: #922;
+}
+
+body.geo-page-org .msg {
+    margin: 12px 0;
+    padding: 10px;
+    border-radius: 8px;
+    font-size: 14px;
+}
+
+body.geo-page-org .msg.ok {
+    background: #d4edda;
+    color: #155724;
+}
+
+body.geo-page-org .msg.err {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+body.geo-page-org .row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 8px 0;
+}
+
+body.geo-page-org .token {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    word-break: break-all;
+    background: #eef1f6;
+    padding: 8px;
+    border-radius: 6px;
+}
+
+body.geo-page-org .card {
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+    margin-bottom: 16px;
+}
+
+body.geo-page-org a {
+    color: #1a5fb4;
+}
+
+/* --- Карта полей (map.html): только сброс; остальное в шаблоне --- */
+body.geo-page-map {
+    margin: 0;
+    padding: 0;
+    font-family: system-ui, sans-serif;
+}

@@ -16,16 +16,25 @@ INSERT INTO crops (crop_name) VALUES
                                   ('Соя'),
                                   ('Рапс озимый');
 
--- 3. Пользователи (organization_id подтягивается динамически)
-INSERT INTO users (login, email, password_hash, organization_id)
-SELECT 'ivanov', 'ivanov@agro.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id
+-- 3. Пользователи (organization_id подтягивается динамически; пароль один и тот же тестовый хеш bcrypt)
+INSERT INTO users (login, email, password_hash, organization_id, role, registration_status, last_name, first_name, middle_name)
+SELECT 'ivanov', 'ivanov@agro.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id, 'ORG_ADMIN', 'APPROVED', 'Иванов', 'Иван', 'Иванович'
 FROM organizations WHERE name = 'ООО "АгроХолдинг Юг"'
 UNION ALL
-SELECT 'petrov', 'petrov@agro.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id
+SELECT 'petrov', 'petrov@agro.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id, 'ORG_MANAGER', 'APPROVED', 'Петров', 'Пётр', 'Петрович'
 FROM organizations WHERE name = 'ООО "АгроХолдинг Юг"'
 UNION ALL
-SELECT 'sidorov', 'sidorov@zeldolina.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id
-FROM organizations WHERE name = 'КФХ "Зеленая Долина"';
+SELECT 'sidorov', 'sidorov@zeldolina.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id, 'USER', 'APPROVED', 'Сидоров', 'Сидор', 'Сидорович'
+FROM organizations WHERE name = 'КФХ "Зеленая Долина"'
+UNION ALL
+SELECT 'agronom1', 'agronom1@agro.ru', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYuJ0u.5jIy', id, 'AGRONOMIST', 'APPROVED', 'Смирнов', 'Алексей', 'Николаевич'
+FROM organizations WHERE name = 'ООО "АгроХолдинг Юг"';
+
+-- Демо-приглашение (одноразовое): после одной успешной регистрации токен сгорает
+-- /register?ref=demo-invite-agro-2026
+INSERT INTO org_registration_invites (organization_id, token, revoked)
+SELECT id, 'demo-invite-agro-2026', false
+FROM organizations WHERE name = 'ООО "АгроХолдинг Юг"';
 
 -- 4. История посевов (2 записи для полей 1 и 2)
 INSERT INTO field_crops (
