@@ -15,6 +15,7 @@ java {
 }
 
 repositories {
+    maven { url "https://repo.osgeo.org/repository/release/"}
     mavenCentral()
 }
 
@@ -22,11 +23,37 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation 'org.springframework.session:spring-session-data-redis'
+    implementation 'javax.validation:validation-api:2.0.1.Final'
+    implementation 'org.springframework.boot:spring-boot-starter-validation:3.5.0'
+    runtimeOnly 'org.postgresql:postgresql'
+
     developmentOnly 'org.springframework.boot:spring-boot-devtools'
     testImplementation 'org.springframework.boot:spring-boot-starter-actuator-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-thymeleaf-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'com.h2database:h2'
+
+    // GeoTools для работы с шейп-файлами
+    implementation group: 'org.geotools', name: 'gt-epsg-hsql', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-referencing', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-main', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-shapefile', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-geojson', version: '30.0'
+    implementation group: 'org.geotools', name: 'gt-api', version: '30.0'
+
+
+    // Jackson для JSON
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    implementation 'org.projectlombok:lombok:1.18.38'
+    annotationProcessor 'org.projectlombok:lombok:1.18.38'
 }
 
 tasks.named('test') {

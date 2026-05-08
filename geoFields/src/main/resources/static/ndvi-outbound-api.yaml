@@ -1,0 +1,314 @@
+openapi: 3.0.3
+info:
+  title: GeoFields → провайдер NDVI (исходящие запросы)
+  description: |
+    Контракт **клиента** GeoFields: JSON, который бэкенд отправляет **стороннему** сервису NDVI,
+    когда в БД нет данных на дату (`field_analytics` / `ndvi_data`).
+
+    Реализация: `NdviExternalFetchPlaceholder` (сейчас сериализует тело в лог; позже — HTTP).
+
+    Поле **`fields_geojson`** — тот же формат, что ответ **`GET /get_fields`**: GeoJSON FeatureCollection
+    с геометрией полигона(ов) и `properties` (id, name, area, history), без изменений относительно HTML/карты.
+
+    Файл лежит рядом со статикой: `/ndvi-outbound-api.yaml`.
+
+    Дата снимка: `record_date` — `YYYY-MM-DD`. Точка: WGS84 (`latitude`, `longitude`).
+  version: 0.2.0
+
+servers:
+  - url: https://ndvi-provider.example.com
+    description: Хост провайдера (заменить в конфигурации)
+
+tags:
+  - name: NDVI Outbound
+    description: Исходящие запросы GeoFields
+
+security:
+  - bearerAuth: []
+
+paths:
+  /v1/ndvi/tiles/field:
+    post:
+      tags: [NDVI Outbound]
+      summary: Заказ NDVI-тайлов для одного поля
+      description: Сценарий отсутствия NDVI в БД при `/get_ndvi_by_id`.
+      operationId: ndviOutboundTileForField
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NdviTileFieldRequest"
+            example:
+              organization_id: 3
+              field_id: 12
+              record_date: "2024-06-15"
+              fields_geojson:
+                type: FeatureCollection
+                features:
+                  - type: Feature
+                    id: 12
+                    properties:
+                      id: 12
+                      name: "Участок Север"
+                      area: 120.5
+                      history: []
+                    geometry:
+                      type: Polygon
+                      coordinates: [[[38.9, 45.0], [39.0, 45.0], [39.0, 45.1], [38.9, 45.1], [38.9, 45.0]]]
+      responses:
+        "202":
+          description: Задача принята
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviJobAccepted"
+        "200":
+          description: Синхронный URL тайлов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviTileUrlPayload"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Не авторизован
+
+  /v1/ndvi/tiles/fields:
+    post:
+      tags: [NDVI Outbound]
+      summary: Заказ NDVI-тайлов для набора полей
+      description: |
+        Сценарий `/get_all_ndvi_tile`. В `fields_geojson` — только запрошенные поля (подмножество `/get_fields`).
+        Пустой `features` допустим, если список id пуст или геометрии нет.
+      operationId: ndviOutboundTileForFields
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NdviTileFieldsRequest"
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviJobAccepted"
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviTileUrlPayload"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Не авторизован
+
+  /v1/ndvi/point-value:
+    post:
+      tags: [NDVI Outbound]
+      summary: Заказ значения NDVI в точке
+      description: |
+        Сценарий `/get_ndvi_value`. Если точка попала в поле — в `fields_geojson` одна фича этого поля;
+        иначе `features: []`, `field_id` в корне — `null`.
+      operationId: ndviOutboundPointValue
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NdviPointValueRequest"
+      responses:
+        "202":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviJobAccepted"
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviScalarPayload"
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Не авторизован
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    GeoJsonFeatureCollection:
+      type: object
+      description: Как в ответе GET /get_fields (type FeatureCollection).
+      required:
+        - type
+        - features
+      properties:
+        type:
+          type: string
+          enum: [FeatureCollection]
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/GeoJsonFeature"
+
+    GeoJsonFeature:
+      type: object
+      required:
+        - type
+        - geometry
+        - properties
+      properties:
+        type:
+          type: string
+          enum: [Feature]
+        id:
+          type: integer
+          format: int64
+          description: id поля в БД (дублирует properties.id)
+        geometry:
+          $ref: "#/components/schemas/GeoJsonGeometry"
+        properties:
+          type: object
+          description: |
+            Поля как у FieldFeaturePropertiesDto — id, name, area, history (массив записей посевов / аналитики).
+          additionalProperties: true
+
+    GeoJsonGeometry:
+      type: object
+      required:
+        - type
+        - coordinates
+      properties:
+        type:
+          type: string
+          enum: [Polygon, MultiPolygon, Point, MultiPoint, LineString, MultiLineString]
+        coordinates:
+          description: Координаты в формате GeoJSON (вложенные массивы чисел).
+          type: array
+          items: {}
+
+    NdviTileFieldRequest:
+      type: object
+      required:
+        - organization_id
+        - field_id
+        - record_date
+        - fields_geojson
+      properties:
+        organization_id:
+          type: integer
+          format: int64
+        field_id:
+          type: integer
+          format: int64
+        record_date:
+          type: string
+          format: date
+        fields_geojson:
+          $ref: "#/components/schemas/GeoJsonFeatureCollection"
+
+    NdviTileFieldsRequest:
+      type: object
+      required:
+        - organization_id
+        - field_ids
+        - record_date
+        - fields_geojson
+      properties:
+        organization_id:
+          type: integer
+          format: int64
+        field_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        record_date:
+          type: string
+          format: date
+        fields_geojson:
+          $ref: "#/components/schemas/GeoJsonFeatureCollection"
+
+    NdviPointValueRequest:
+      type: object
+      required:
+        - organization_id
+        - latitude
+        - longitude
+        - record_date
+        - fields_geojson
+      properties:
+        organization_id:
+          type: integer
+          format: int64
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        record_date:
+          type: string
+          format: date
+        field_id:
+          type: integer
+          format: int64
+          nullable: true
+        fields_geojson:
+          $ref: "#/components/schemas/GeoJsonFeatureCollection"
+
+    NdviJobAccepted:
+      type: object
+      required:
+        - job_id
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          example: accepted
+
+    NdviTileUrlPayload:
+      type: object
+      required:
+        - tile_url
+      properties:
+        tile_url:
+          type: string
+
+    NdviScalarPayload:
+      type: object
+      required:
+        - value
+      properties:
+        value:
+          type: number
+          format: double
+
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
