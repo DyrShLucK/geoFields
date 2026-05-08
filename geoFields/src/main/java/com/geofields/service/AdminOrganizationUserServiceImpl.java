@@ -1,8 +1,8 @@
 package com.geofields.service;
 
 import com.geofields.dto.orgmanager.ActionResult;
-import com.geofields.repository.OrganizationMemberRow;
 import com.geofields.repository.UserAccountRepository;
+import com.geofields.repository.row.OrganizationMemberRow;
 import com.geofields.security.GeoFieldsUserDetails;
 import com.geofields.security.UserRole;
 import org.springframework.stereotype.Service;

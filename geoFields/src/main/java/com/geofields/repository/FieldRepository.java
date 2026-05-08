@@ -1,5 +1,7 @@
 package com.geofields.repository;
 
+import com.geofields.repository.row.FieldHistoryRow;
+
 import java.util.List;
 
 // Контракт репозитория для работы с таблицей fields.

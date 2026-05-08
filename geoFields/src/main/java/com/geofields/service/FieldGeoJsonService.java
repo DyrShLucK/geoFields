@@ -19,7 +19,7 @@ public class FieldGeoJsonService {
         this.fieldGeoJsonQueryService = fieldGeoJsonQueryService;
     }
 
-    /** GeoJSON полей организации текущего пользователя (сборка в {@link FieldGeoJsonQueryService}). */
+    /** GeoJSON полей текущей организации пользователя. */
     public FieldFeatureCollectionDto getFieldsAsFeatureCollection() {
         try {
             Long organizationId = authContextService.getCurrentOrganizationId();

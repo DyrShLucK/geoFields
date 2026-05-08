@@ -1,4 +1,4 @@
-package com.geofields.repository;
+package com.geofields.repository.row;
 
 import com.geofields.security.UserRole;
 

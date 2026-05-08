@@ -176,6 +176,93 @@ body.geo-page-org a {
     color: #1a5fb4;
 }
 
+/* --- Страница ошибок (error.html) --- */
+body.geo-page-error {
+    font-family: system-ui, sans-serif;
+    background: #f2f4f8;
+    margin: 0;
+}
+
+body.geo-page-error .wrap {
+    max-width: 520px;
+    margin: 72px auto;
+    background: #fff;
+    padding: 28px;
+    border-radius: 12px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
+}
+
+body.geo-page-error h1 {
+    margin: 0 0 8px;
+    font-size: 2rem;
+    color: #c0392b;
+}
+
+body.geo-page-error .lead {
+    font-size: 1.1rem;
+    margin: 0 0 12px;
+    color: #333;
+}
+
+body.geo-page-error .hint {
+    color: #555;
+    font-size: 14px;
+    margin: 12px 0;
+    line-height: 1.45;
+}
+
+body.geo-page-error .muted {
+    color: #777;
+    font-size: 13px;
+    margin: 8px 0;
+}
+
+body.geo-page-error .muted code {
+    font-size: 12px;
+    background: #eef1f6;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+body.geo-page-error .actions {
+    margin-top: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+body.geo-page-error a.btn-link {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    background: #2f80ed;
+    color: #fff;
+}
+
+body.geo-page-error a.btn-link.secondary {
+    background: #fff;
+    color: #1a5fb4;
+    border: 1px solid #ccd3df;
+}
+
+body.geo-page-error details.trace {
+    margin-top: 20px;
+    font-size: 12px;
+}
+
+body.geo-page-error details.trace pre {
+    overflow: auto;
+    max-height: 240px;
+    background: #1e1e1e;
+    color: #e0e0e0;
+    padding: 12px;
+    border-radius: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 /* --- Карта полей (map.html): только сброс; остальное в шаблоне --- */
 body.geo-page-map {
     margin: 0;

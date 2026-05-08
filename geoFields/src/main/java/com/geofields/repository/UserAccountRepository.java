@@ -1,5 +1,7 @@
 package com.geofields.repository;
 
+import com.geofields.repository.row.OrganizationMemberRow;
+import com.geofields.repository.row.PendingRegistrationRow;
 import com.geofields.security.UserRole;
 
 import java.util.List;

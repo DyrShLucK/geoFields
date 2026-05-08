@@ -1,5 +1,7 @@
 package com.geofields.repository;
 
+import com.geofields.repository.row.OrganizationMemberRow;
+import com.geofields.repository.row.PendingRegistrationRow;
 import com.geofields.security.UserRole;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -9,6 +11,11 @@ import java.util.Optional;
 
 @Repository
 public class JdbcUserAccountRepository implements UserAccountRepository {
+
+    private static final String SELECT_ORG_MEMBER_BASE = """
+            SELECT id, login, email, last_name, first_name, middle_name, role, registration_status, is_active
+            FROM users
+            """;
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -133,22 +140,11 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
     @Override
     public List<OrganizationMemberRow> findMembersByOrganization(long organizationId) {
         return jdbcTemplate.query(
-                """
-                        SELECT id, login, email, last_name, first_name, middle_name, role, registration_status, is_active
-                        FROM users
+                SELECT_ORG_MEMBER_BASE + """
                         WHERE organization_id = ?
                         ORDER BY id
                         """,
-                (rs, rowNum) -> new OrganizationMemberRow(
-                        rs.getLong("id"),
-                        rs.getString("login"),
-                        rs.getString("email"),
-                        nullToEmpty(rs.getString("last_name")),
-                        nullToEmpty(rs.getString("first_name")),
-                        nullToEmpty(rs.getString("middle_name")),
-                        UserRole.fromDatabase(rs.getString("role")),
-                        rs.getString("registration_status"),
-                        rs.getBoolean("is_active")),
+                this::mapOrganizationMemberRow,
                 organizationId);
     }
 
@@ -159,21 +155,10 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
     @Override
     public Optional<OrganizationMemberRow> findMember(long organizationId, long userId) {
         List<OrganizationMemberRow> rows = jdbcTemplate.query(
-                """
-                        SELECT id, login, email, last_name, first_name, middle_name, role, registration_status, is_active
-                        FROM users
+                SELECT_ORG_MEMBER_BASE + """
                         WHERE organization_id = ? AND id = ?
                         """,
-                (rs, rowNum) -> new OrganizationMemberRow(
-                        rs.getLong("id"),
-                        rs.getString("login"),
-                        rs.getString("email"),
-                        nullToEmpty(rs.getString("last_name")),
-                        nullToEmpty(rs.getString("first_name")),
-                        nullToEmpty(rs.getString("middle_name")),
-                        UserRole.fromDatabase(rs.getString("role")),
-                        rs.getString("registration_status"),
-                        rs.getBoolean("is_active")),
+                this::mapOrganizationMemberRow,
                 organizationId,
                 userId);
         return rows.isEmpty() ? Optional.empty() : Optional.of(rows.getFirst());
@@ -203,5 +188,18 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
                 Long.class,
                 organizationId);
         return n != null ? n : 0L;
+    }
+
+    private OrganizationMemberRow mapOrganizationMemberRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new OrganizationMemberRow(
+                rs.getLong("id"),
+                rs.getString("login"),
+                rs.getString("email"),
+                nullToEmpty(rs.getString("last_name")),
+                nullToEmpty(rs.getString("first_name")),
+                nullToEmpty(rs.getString("middle_name")),
+                UserRole.fromDatabase(rs.getString("role")),
+                rs.getString("registration_status"),
+                rs.getBoolean("is_active"));
     }
 }

@@ -1,5 +1,6 @@
 package com.geofields.repository;
 
+import com.geofields.repository.row.FieldHistoryRow;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -12,7 +13,7 @@ import java.util.List;
 public class JdbcFieldRepository implements FieldRepository {
     private static final Logger log = LoggerFactory.getLogger(JdbcFieldRepository.class);
 
-    // Основной запрос под текущую схему (crops + history_id + harvested_area_ha).
+    // Чтение полей с историей и последней NDVI-аналитикой по организации.
     private static final String GET_FIELDS_WITH_HISTORY_SQL = """
             SELECT f.id                                      AS field_id,
                    f.field_name                              AS field_name,
@@ -66,11 +67,10 @@ public class JdbcFieldRepository implements FieldRepository {
             )
             """;
 
-    // Отдаем плоский список строк, сервис сгруппирует их по полю.
     @Override
     public List<FieldHistoryRow> findAllFieldsWithHistory(Long organizationId) {
         try {
-            List<FieldHistoryRow> rows = queryWithHistory(GET_FIELDS_WITH_HISTORY_SQL, organizationId);
+            List<FieldHistoryRow> rows = queryWithHistory(organizationId);
             log.info("Loaded {} field history rows for organization {}", rows.size(), organizationId);
             return rows;
         } catch (DataAccessException mainEx) {
@@ -89,8 +89,11 @@ public class JdbcFieldRepository implements FieldRepository {
         return Boolean.TRUE.equals(exists);
     }
 
-    private List<FieldHistoryRow> queryWithHistory(String sql, Long organizationId) {
-        return jdbcTemplate.query(sql, ps -> ps.setLong(1, organizationId), (rs, rowNum) -> mapHistoryRow(rs));
+    private List<FieldHistoryRow> queryWithHistory(Long organizationId) {
+        return jdbcTemplate.query(
+                GET_FIELDS_WITH_HISTORY_SQL,
+                ps -> ps.setLong(1, organizationId),
+                (rs, rowNum) -> mapHistoryRow(rs));
     }
 
     private FieldHistoryRow mapHistoryRow(java.sql.ResultSet rs) throws java.sql.SQLException {

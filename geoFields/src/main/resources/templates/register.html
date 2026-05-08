@@ -14,7 +14,6 @@
 <body class="geo-page-auth">
 <div class="wrap">
     <h1>Регистрация</h1>
-    <div class="hint">Нужна <strong>одноразовая ссылка-приглашение</strong> от менеджера (<code>?ref=…</code>). После успешной отправки ссылку нельзя использовать повторно; заявку проверит менеджер.</div>
     <div class="err" th:if="${errorMessage != null}" th:text="${errorMessage}"></div>
     <form method="post" th:action="@{/register}" id="register-form">
         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
@@ -59,7 +58,7 @@
             }
             if (!document.getElementById('inviteToken').value.trim()) {
                 e.preventDefault();
-                alert('Откройте регистрацию по ссылке с параметром ref (приглашение от организации).');
+                alert('Укажите токен приглашения.');
                 return;
             }
             if (!document.getElementById('lastName').value.trim() || !document.getElementById('firstName').value.trim()) {

@@ -8,7 +8,7 @@ import com.geofields.dto.FieldFeatureDto;
 import com.geofields.dto.FieldFeaturePropertiesDto;
 import com.geofields.dto.FieldHistoryItemDto;
 import com.geofields.dto.GeoJsonGeometryDto;
-import com.geofields.repository.FieldHistoryRow;
+import com.geofields.repository.row.FieldHistoryRow;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;

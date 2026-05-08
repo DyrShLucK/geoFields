@@ -1,4 +1,4 @@
-package com.geofields.repository;
+package com.geofields.repository.row;
 
 import java.time.LocalDateTime;
 

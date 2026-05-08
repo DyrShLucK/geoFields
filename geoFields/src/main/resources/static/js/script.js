@@ -3,21 +3,27 @@
  * Запросы к своему же origin с cookie сессии — бэкенд знает организацию и пользователя.
  */
 
-// Префикс URL бэкенда (пустой = тот же хост, что у страницы).
-const API_URL_PYTHON = "localhost:8000"; // заготовка, если когда-нибудь дернуть другой хост вручную
-const API_URL = "";
-// Без этого fetch не отправит cookie сессии на тот же сайт.
-const fetchOpts = { credentials: "same-origin" };
+//const API_URL = "";
+const API_URL = "http://localhost:8080"; //раскоментируй если запускаешь файлом
+
+const _apiBase = String(API_URL || "").trim().replace(/\/$/, "");
+
+const fetchOpts = { credentials: _apiBase ? "include" : "same-origin" };
+
+function apiPath(path) {
+    const p = path.startsWith("/") ? path : "/" + path;
+    return _apiBase ? _apiBase + p : p;
+}
 
 /**
  * Подтягивает данные текущего пользователя с API (HTML главной без Thymeleaf).
  * Заполняет блок меню, ссылки менеджера/админа, скрытое поле CSRF для POST /logout.
  */
 async function loadSessionContext() {
-    const res = await fetch("/api/session/context", fetchOpts);
+    const res = await fetch(apiPath("/api/session/context"), fetchOpts);
     if (!res.ok) {
         if (res.status === 401) {
-            window.location.href = "/login";
+            window.location.href = apiPath("/login");
         }
         return;
     }
@@ -47,10 +53,68 @@ async function loadSessionContext() {
     if (d.admin) {
         el("link-org-admin").style.display = "block";
     }
+    if (d.agronomist || d.admin) {
+        el("link-org-agronomist").style.display = "block";
+    }
+    /** Агроном и администратор организации — страница истории посевов и ссылка из popup. */
+    canOpenAgronomistPage = !!(d.agronomist || d.admin);
+    updateAgronomistHistoryLink();
 }
+
+/** URL страницы истории посевов; если на карте выбрано поле — добавляется ?fieldId=… */
+function agronomistHistoryPageUrl() {
+    const base = apiPath("/org/agronomist");
+    if (selectedFieldDbId == null || selectedFieldDbId === "") {
+        return base;
+    }
+    const sep = base.includes("?") ? "&" : "?";
+    return base + sep + "fieldId=" + encodeURIComponent(String(selectedFieldDbId));
+}
+
+/** Блок в боковой панели: какое поле сейчас выбрано на карте. */
+function updateSelectedFieldInfo(props) {
+    const span = document.getElementById("selected-field-info");
+    if (!span) {
+        return;
+    }
+    if (props == null || selectedFieldDbId == null || selectedFieldDbId === "") {
+        span.textContent = "не выбрано";
+        return;
+    }
+    const name = props.name != null && String(props.name).trim() !== "" ? String(props.name).trim() : "Без имени";
+    span.textContent = name + " · id " + props.id;
+}
+
+function updateAgronomistHistoryLink() {
+    const a = document.getElementById("link-org-agronomist-anchor");
+    const hint = document.getElementById("link-org-agronomist-hint");
+    if (!a) {
+        return;
+    }
+    a.href = agronomistHistoryPageUrl();
+    if (!hint) {
+        return;
+    }
+    if (!canOpenAgronomistPage) {
+        hint.style.display = "none";
+        return;
+    }
+    if (selectedFieldDbId != null && selectedFieldDbId !== "") {
+        hint.style.display = "none";
+        hint.textContent = "";
+    } else {
+        hint.style.display = "block";
+        hint.textContent = "Поле не выбрано.";
+    }
+}
+
+// GeoJSON полей после загрузки — список id для NDVI «все поля».
+let loadedFieldsGeoJson = null;
 
 // id поля в БД (из properties фичи GeoJSON) — для запросов NDVI по одному полю.
 let selectedFieldDbId = null;
+/** Доступ к /org/agronomist: агроном или админ организации. */
+let canOpenAgronomistPage = false;
 // Внутренний id объекта на карте (feature-state «выбран») — для подсветки полигона.
 let selectedMaplibreId = null;
 
@@ -109,11 +173,12 @@ map.on('load', async () => {
 async function loadFields() {
     const statusBox = document.getElementById('status-bar');
     try {
-        const response = await fetch(`/get_fields`, fetchOpts);
+        const response = await fetch(apiPath("/get_fields"), fetchOpts);
         if (!response.ok) {
             throw new Error(`Ошибка загрузки полей: ${response.status}`);
         }
         const data = await response.json();
+        loadedFieldsGeoJson = data;
 
         map.addSource('fields-source', {
             type: 'geojson',
@@ -193,6 +258,8 @@ map.on('click', 'fields-fill', (e) => {
         selectedMaplibreId = feature.id;
         selectedFieldDbId = props.id;
         map.setFeatureState({ source: 'fields-source', id: selectedMaplibreId }, { selected: true });
+        updateSelectedFieldInfo(props);
+        updateAgronomistHistoryLink();
 
         const statusBox = document.getElementById('status-bar');
         statusBox.innerText = 'Поле выбрано — детали открыты во всплывающем окне.';
@@ -200,7 +267,7 @@ map.on('click', 'fields-fill', (e) => {
         new maplibregl.Popup({ closeButton: true, className: 'custom-popup' })
             .setLngLat(e.lngLat)
             .setMaxWidth('420px')
-            .setHTML(fieldPopupHtml(props, history))
+            .setHTML(fieldPopupHtml(props, history, canOpenAgronomistPage))
             .addTo(map);
     }
 });
@@ -212,7 +279,7 @@ async function updateNDVI() {
 
     try {
         const response = await fetch(
-            `${API_URL}/get_ndvi_by_id?field_id=${encodeURIComponent(selectedFieldDbId)}&date=${encodeURIComponent(date)}`,
+            `${apiPath("/get_ndvi_by_id")}?field_id=${encodeURIComponent(selectedFieldDbId)}&date=${encodeURIComponent(date)}`,
             fetchOpts
         );
         if (!response.ok) {
@@ -225,12 +292,28 @@ async function updateNDVI() {
     } catch (err) { alert(err.message || "Ошибка NDVI"); }
 }
 
+/** Собираем id полей из загруженного GeoJSON (как на странице). */
+function collectFieldIdsFromLoadedGeoJson() {
+    if (!loadedFieldsGeoJson || !Array.isArray(loadedFieldsGeoJson.features)) return [];
+    const ids = new Set();
+    for (const f of loadedFieldsGeoJson.features) {
+        const id = f.properties && f.properties.id;
+        if (id != null && String(id).trim() !== "") ids.add(String(id).trim());
+    }
+    return [...ids];
+}
+
 /** NDVI по всей организации на дату. */
 async function updateAllNDVI() {
     const date = document.getElementById('date-input').value;
     try {
+        const params = new URLSearchParams();
+        params.set("date", date);
+        for (const id of collectFieldIdsFromLoadedGeoJson()) {
+            params.append("field_ids", id);
+        }
         const response = await fetch(
-            `${API_URL}/get_all_ndvi_tile?date=${encodeURIComponent(date)}`,
+            `${apiPath("/get_all_ndvi_tile")}?${params.toString()}`,
             fetchOpts
         );
         if (!response.ok) {
@@ -349,9 +432,17 @@ function fieldHistoryItemsHtml(history) {
 }
 
 /** Сборка HTML целого popup из сводки и истории. */
-function fieldPopupHtml(props, history) {
+function fieldPopupHtml(props, history, isAgronomist) {
     const summary = fieldSummaryHtml(props, history.length);
     const items = fieldHistoryItemsHtml(history);
+    const editHistoryUrl = isAgronomist
+        ? escapeHtml(apiPath("/org/agronomist") + "?fieldId=" + encodeURIComponent(String(props.id)))
+        : "";
+    const agronomistBlock = isAgronomist
+        ? `<div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.15); font-size: 13px;">
+                <a href="${editHistoryUrl}" style="font-weight: 600;">Редактировать историю посевов этого поля</a>
+            </div>`
+        : "";
     return `
         <div style="padding: 8px 10px; color: #333; width: 380px; max-width: 100%;">
             <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.15);">
@@ -361,6 +452,7 @@ function fieldPopupHtml(props, history) {
             <div style="max-height: 300px; overflow-y: auto; padding-right: 4px; font-size: 12px;">
                 ${items}
             </div>
+            ${agronomistBlock}
         </div>
     `;
 }

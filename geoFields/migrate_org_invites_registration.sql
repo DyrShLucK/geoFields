@@ -15,7 +15,7 @@ ALTER TABLE users ADD CONSTRAINT users_registration_status_check
 
 ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
 ALTER TABLE users ADD CONSTRAINT users_role_check
-    CHECK (role IN ('USER', 'ORG_ADMIN', 'ORG_MANAGER'));
+    CHECK (role IN ('USER', 'ADMIN', 'ORG_MANAGER'));
 
 CREATE TABLE IF NOT EXISTS org_registration_invites (
     id              SERIAL PRIMARY KEY,

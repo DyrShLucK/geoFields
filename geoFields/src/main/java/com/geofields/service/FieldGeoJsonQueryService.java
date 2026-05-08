@@ -1,17 +1,19 @@
 package com.geofields.service;
 
 import com.geofields.dto.FieldFeatureCollectionDto;
-import com.geofields.repository.FieldHistoryRow;
+import com.geofields.dto.FieldFeatureDto;
 import com.geofields.repository.FieldRepository;
+import com.geofields.repository.row.FieldHistoryRow;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
-// Чтение из БД + сборка GeoJSON. Кэш отключён (проблемы с Redis/Jackson); при возврате кэша:
-// @EnableCaching, spring.cache.type=redis, @Cacheable(cacheNames="fieldFeaturesByOrg", key="#organizationId")
-// и RedisCacheManager с ObjectMapper как у HTTP — см. удалённый GeoFieldsRedisCacheConfiguration в истории.
+// Читает данные полей и собирает GeoJSON-ответы.
 @Service
 public class FieldGeoJsonQueryService {
 
@@ -31,5 +33,20 @@ public class FieldGeoJsonQueryService {
         FieldFeatureCollectionDto dto = assembler.toFeatureCollection(rows);
         log.info("Built {} GeoJSON features for /get_fields", dto.features().size());
         return dto;
+    }
+
+    /** Возвращает подмножество Feature по списку field id. */
+    public FieldFeatureCollectionDto loadFeatureSubsetByFieldIds(Long organizationId, Collection<Long> fieldIds) {
+        if (fieldIds == null || fieldIds.isEmpty()) {
+            return new FieldFeatureCollectionDto("FeatureCollection", List.of());
+        }
+        Set<Long> wanted = fieldIds instanceof Set<Long> set
+                ? set
+                : new LinkedHashSet<>(fieldIds);
+        FieldFeatureCollectionDto all = loadForOrganization(organizationId);
+        List<FieldFeatureDto> filtered = all.features().stream()
+                .filter(f -> wanted.contains(f.id()))
+                .toList();
+        return new FieldFeatureCollectionDto("FeatureCollection", filtered);
     }
 }
