@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Регистрация</title>
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+    <style>
+        body.geo-page-auth .wrap button {
+            background: #27ae60;
+        }
+    </style>
+</head>
+<body class="geo-page-auth">
+<div class="wrap">
+    <h1>Регистрация</h1>
+    <div class="err" th:if="${errorMessage != null}" th:text="${errorMessage}"></div>
+    <form method="post" th:action="@{/register}" id="register-form">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+        <input type="hidden" id="inviteToken" name="inviteToken" th:value="${inviteToken}"/>
+        <label for="lastName">Фамилия</label>
+        <input id="lastName" name="lastName" required maxlength="100" th:value="${lastName}" autocomplete="family-name" />
+
+        <label for="firstName">Имя</label>
+        <input id="firstName" name="firstName" required maxlength="100" th:value="${firstName}" autocomplete="given-name" />
+
+        <label for="middleName">Отчество</label>
+        <input id="middleName" name="middleName" maxlength="100" th:value="${middleName}" autocomplete="additional-name" />
+
+        <label for="login">Логин</label>
+        <input id="login" name="login" required minlength="3" maxlength="100" th:value="${login}" autocomplete="username" />
+
+        <label for="email">Электронная почта</label>
+        <input id="email" name="email" type="email" required maxlength="255" th:value="${email}" autocomplete="email" />
+
+        <label for="password">Пароль</label>
+        <input id="password" name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+
+        <label for="passwordConfirm">Повтор пароля</label>
+        <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+
+        <button type="submit">Создать аккаунт</button>
+    </form>
+    <script>
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var r = params.get('ref');
+            var hidden = document.getElementById('inviteToken');
+            if (r && hidden && !hidden.value) hidden.value = r;
+        })();
+        document.getElementById('register-form').addEventListener('submit', function (e) {
+            var p = document.getElementById('password').value;
+            var c = document.getElementById('passwordConfirm').value;
+            if (p !== c) {
+                e.preventDefault();
+                alert('Пароли не совпадают.');
+                return;
+            }
+            if (!document.getElementById('inviteToken').value.trim()) {
+                e.preventDefault();
+                alert('Укажите токен приглашения.');
+                return;
+            }
+            if (!document.getElementById('lastName').value.trim() || !document.getElementById('firstName').value.trim()) {
+                e.preventDefault();
+                alert('Укажите фамилию и имя.');
+            }
+        });
+    </script>
+    <div class="links">
+        Уже есть аккаунт? <a th:href="@{/login}">Войти</a>
+    </div>
+</div>
+</body>
+</html>

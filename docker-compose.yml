@@ -1,0 +1,63 @@
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: geofields-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: geofields
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./LAST_BCUP_BD.sql:/docker-entrypoint-initdb.d/01_LAST_BCUP_BD.dump:ro
+      - ./docker/postgres-init/02_restore_backup.sh:/docker-entrypoint-initdb.d/02_restore_backup.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d geofields"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: geofields-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: eclipse-temurin:21-jre-alpine
+    container_name: geofields-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/geofields
+      DB_USERNAME: postgres
+      DB_PASSWORD: 12345
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      SERVER_PORT: 8080
+    working_dir: /app
+    command: ["java", "-jar", "/app/app.jar"]
+    volumes:
+      - ./geoFields/build/libs/geoFields-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
+  redis_data:
