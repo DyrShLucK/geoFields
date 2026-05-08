@@ -5,9 +5,9 @@
 Из корня проекта:
 
 ```bash
-cd "C:/Users/adm/Desktop/diplom Main/geoFields"
+cd ./geoFields
 ./gradlew clean bootJar
-cd "C:/Users/adm/Desktop/diplom Main"
+cd ../
 docker compose down -v
 docker compose up -d
 ```
@@ -39,7 +39,7 @@ docker compose logs app --tail=200
 Запуск:
 
 ```bash
-cd "C:/Users/adm/Desktop/diplom Main/geoFields"
+cd "./geoFields"
 ./gradlew bootRun
 ```
 
