@@ -2,14 +2,17 @@
 
 ## Запуск через Docker
 Если есть изменения в коде
+
 Из корня проекта:
 
 ```bash
 cd "/geoFields"
 ./gradlew clean bootJar
 cd "../"
-
+```
 Если нет изменений
+
+```
 docker compose down -v
 docker compose up -d
 ```
