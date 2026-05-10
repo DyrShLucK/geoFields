@@ -64,7 +64,7 @@ cd "C:/Users/adm/Desktop/diplom Main/geoFields"
 - CSS: `geoFields/src/main/resources/static/css/`
 - JavaScript: `geoFields/src/main/resources/static/js/`
 
-## Для запросов через postmman или api
+## Для запросов через postman или api
 
 - В cookie указать JSESSIONID и XSRF-TOKEN
 - Для post запросов получить csrf токен по http://localhost:8080/api/session/context и указать его в загаловках как X-XSRF-TOKEN
