@@ -1,13 +1,18 @@
 # geoFields: быстрый запуск
 
 ## Запуск через Docker
+Если есть изменения в коде
 
 Из корня проекта:
 
 ```bash
-cd ./geoFields
+cd "/geoFields"
 ./gradlew clean bootJar
-cd ../
+cd "../"
+```
+Если нет изменений
+
+```
 docker compose down -v
 docker compose up -d
 ```
