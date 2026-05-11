@@ -1,8 +1,6 @@
 # geoFields: быстрый запуск
 
 ## Запуск через Docker
-Если есть изменения в коде
-
 
 ```
 docker compose down -v
