@@ -39,6 +39,7 @@ class FieldGeoJsonServiceTest {
                                                 1L,
                                                 "Field A",
                                                 new BigDecimal("44.50"),
+                                                true,
                                                 List.of(
                                                         new com.geofields.dto.FieldHistoryItemDto(
                                                                 101L,

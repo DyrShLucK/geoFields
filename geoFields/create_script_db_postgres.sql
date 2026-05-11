@@ -12,6 +12,7 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 DROP TABLE IF EXISTS field_analytics CASCADE;
 DROP TABLE IF EXISTS ndvi_data CASCADE;
 DROP TABLE IF EXISTS field_crops CASCADE;
+DROP TABLE IF EXISTS field_intersections CASCADE;
 DROP TABLE IF EXISTS org_registration_invites CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS fields CASCADE;
@@ -43,7 +44,39 @@ CREATE TABLE fields (
     geom GEOMETRY(MultiPolygon, 4326),
     field_id NUMERIC,
     field_name VARCHAR(254),
-    field_area NUMERIC
+    field_area NUMERIC,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+-- ============================================
+-- 3.1 ПЕРЕСЕЧЕНИЯ ПОЛЕЙ
+-- ============================================
+CREATE TABLE field_intersections (
+    organization_id INTEGER NOT NULL,
+    field_id_left INTEGER NOT NULL,
+    field_id_right INTEGER NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT pk_field_intersections
+        PRIMARY KEY (field_id_left, field_id_right),
+
+    CONSTRAINT chk_field_intersections_order
+        CHECK (field_id_left < field_id_right),
+
+    CONSTRAINT fk_field_intersections_organization
+        FOREIGN KEY (organization_id)
+            REFERENCES organizations (id)
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_field_intersections_left
+        FOREIGN KEY (field_id_left)
+            REFERENCES fields (id)
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_field_intersections_right
+        FOREIGN KEY (field_id_right)
+            REFERENCES fields (id)
+            ON DELETE CASCADE
 );
 
 -- ============================================
@@ -162,6 +195,9 @@ CREATE INDEX idx_field_crops_crop_id ON field_crops (crop_id);
 CREATE INDEX idx_field_crops_field_id ON field_crops (field_id);
 CREATE INDEX idx_field_crops_organization_id ON field_crops (organization_id);
 CREATE INDEX idx_field_crops_crop_year ON field_crops (crop_year);
+CREATE INDEX idx_field_intersections_org ON field_intersections (organization_id);
+CREATE INDEX idx_field_intersections_left ON field_intersections (field_id_left);
+CREATE INDEX idx_field_intersections_right ON field_intersections (field_id_right);
 CREATE INDEX idx_analytics_field_crop_id ON field_analytics (field_crop_id);
 CREATE INDEX idx_analytics_ndvi_id ON field_analytics (ndvi_id);
 CREATE INDEX idx_analytics_record_date ON field_analytics (record_date);
@@ -173,6 +209,7 @@ CREATE INDEX idx_fields_geom ON fields USING GIST (geom);
 COMMENT ON TABLE organizations IS 'Справочник организаций/хозяйств';
 COMMENT ON TABLE crops IS 'Справочник сельскохозяйственных культур';
 COMMENT ON TABLE fields IS 'Геоданные полей (границы, площадь)';
+COMMENT ON TABLE field_intersections IS 'Пары полей одной организации, чьи контуры пересекаются';
 COMMENT ON TABLE users IS 'Пользователи системы';
 COMMENT ON TABLE org_registration_invites IS 'Одноразовые токены регистрации в организацию';
 COMMENT ON TABLE field_crops IS 'История посевов: культура, поле, организация, урожайность';
@@ -182,6 +219,9 @@ COMMENT ON TABLE field_analytics IS 'Записи аналитики по стр
 COMMENT ON COLUMN users.password_hash IS 'Хэш пароля (bcrypt и т.п.)';
 COMMENT ON COLUMN users.is_active IS 'Аккаунт активен';
 COMMENT ON COLUMN fields.geom IS 'MultiPolygon, SRID 4326 (WGS 84)';
+COMMENT ON COLUMN fields.is_active IS 'TRUE - активное поле, FALSE - устаревшее и скрыто из выдачи';
+COMMENT ON COLUMN field_intersections.field_id_left IS 'Меньший id поля в паре пересечения';
+COMMENT ON COLUMN field_intersections.field_id_right IS 'Больший id поля в паре пересечения';
 COMMENT ON COLUMN field_crops.sown_area_ha IS 'Посевная площадь, га';
 COMMENT ON COLUMN field_crops.harvested_area_ha IS 'Убранная площадь, га';
 COMMENT ON COLUMN field_crops.actual_yield IS 'Фактическая урожайность (как в вашей методике)';

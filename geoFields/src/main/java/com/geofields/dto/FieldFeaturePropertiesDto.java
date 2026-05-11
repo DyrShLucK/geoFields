@@ -8,6 +8,7 @@ public record FieldFeaturePropertiesDto(
         Long id,
         String name,
         BigDecimal area,
+        boolean active,
         List<FieldHistoryItemDto> history
 ) {
 }

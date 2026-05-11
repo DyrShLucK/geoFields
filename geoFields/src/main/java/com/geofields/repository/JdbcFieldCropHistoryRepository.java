@@ -11,7 +11,6 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
-import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -19,13 +18,18 @@ import java.util.Optional;
 @Repository
 public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepository {
 
-    private static final String LIST_FIELDS = """
+    private static final String LIST_FIELDS_BASE = """
             SELECT DISTINCT f.id,
                    COALESCE(NULLIF(TRIM(f.field_name), ''), 'Поле #' || f.id::text) AS field_name
             FROM fields f
             INNER JOIN field_crops fc ON fc.field_id = f.id AND fc.organization_id = ?
+            WHERE %s
             ORDER BY f.id
             """;
+
+    private static final String LIST_FIELDS = String.format(LIST_FIELDS_BASE, "COALESCE(f.is_active, TRUE)");
+
+    private static final String LIST_OBSOLETE_FIELDS = String.format(LIST_FIELDS_BASE, "NOT COALESCE(f.is_active, TRUE)");
 
     private static final String LIST_CROPS = """
             SELECT c.crop_id, c.crop_name
@@ -59,6 +63,19 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
                 SELECT 1 FROM field_crops fc
                 WHERE fc.history_id = ? AND fc.organization_id = ?
             )
+            """;
+
+    private static final String COUNT_HISTORY_BY_FIELD_SQL = """
+            SELECT COUNT(*)
+            FROM field_crops fc
+            WHERE fc.field_id = ? AND fc.organization_id = ?
+            """;
+
+    private static final String FIND_FIELD_ID_BY_HISTORY_SQL = """
+            SELECT fc.field_id
+            FROM field_crops fc
+            WHERE fc.history_id = ? AND fc.organization_id = ?
+            LIMIT 1
             """;
 
     private static final String CROP_EXISTS = """
@@ -111,6 +128,14 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
     }
 
     @Override
+    public List<FieldOptionRow> listObsoleteFieldsForOrganization(long organizationId) {
+        return jdbcTemplate.query(
+                LIST_OBSOLETE_FIELDS,
+                this::mapFieldOptionRow,
+                organizationId);
+    }
+
+    @Override
     public List<CropOptionRow> listAllCrops() {
         return jdbcTemplate.query(
                 LIST_CROPS,
@@ -133,6 +158,30 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
     }
 
     @Override
+    public long countHistoryByFieldAndOrganization(long fieldId, long organizationId) {
+        Long count = jdbcTemplate.queryForObject(
+                COUNT_HISTORY_BY_FIELD_SQL,
+                Long.class,
+                fieldId,
+                organizationId);
+        return count != null ? count : 0L;
+    }
+
+    @Override
+    public Optional<Long> findFieldIdByHistoryId(long historyId, long organizationId) {
+        try {
+            Long fieldId = jdbcTemplate.queryForObject(
+                    FIND_FIELD_ID_BY_HISTORY_SQL,
+                    Long.class,
+                    historyId,
+                    organizationId);
+            return Optional.ofNullable(fieldId);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
     public long insertHistory(
             long fieldId,
             long organizationId,
@@ -150,7 +199,7 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             Integer cropYear) {
         KeyHolder keyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(connection -> {
-            PreparedStatement ps = connection.prepareStatement(INSERT_HISTORY, Statement.RETURN_GENERATED_KEYS);
+            PreparedStatement ps = connection.prepareStatement(INSERT_HISTORY, new String[]{"history_id"});
             ps.setLong(1, cropId);
             ps.setLong(2, fieldId);
             ps.setLong(3, organizationId);

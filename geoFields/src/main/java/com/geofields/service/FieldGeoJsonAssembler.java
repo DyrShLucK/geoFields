@@ -16,7 +16,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-// Сборка FeatureCollection из строк репозитория — отдельно от кэша и от чтения БД.
 @Component
 public class FieldGeoJsonAssembler {
 
@@ -38,25 +37,7 @@ public class FieldGeoJsonAssembler {
             );
 
             if (row.fieldCropId() != null) {
-                aggregate.history().add(new FieldHistoryItemDto(
-                        row.fieldCropId(),
-                        row.cropId(),
-                        row.cropName(),
-                        row.sowingDate(),
-                        row.harvestDate(),
-                        row.sownAreaHa(),
-                        row.harvestAreaHa(),
-                        row.actualYield(),
-                        row.totalYield(),
-                        row.plannedYield(),
-                        row.forecastedYield(),
-                        row.sourceData(),
-                        row.sowingDetails(),
-                        row.cropYear(),
-                        row.analyticsDate(),
-                        row.ndviUrl(),
-                        row.ndviCreatedAt()
-                ));
+                aggregate.history().add(toHistoryItem(row));
             }
         }
 
@@ -81,9 +62,32 @@ public class FieldGeoJsonAssembler {
                         aggregate.row().fieldId(),
                         aggregate.row().fieldName(),
                         aggregate.row().fieldArea(),
+                        aggregate.row().active(),
                         aggregate.history()
                 ),
                 new GeoJsonGeometryDto(geometryType, coordinatesJson)
+        );
+    }
+
+    private FieldHistoryItemDto toHistoryItem(FieldHistoryRow row) {
+        return new FieldHistoryItemDto(
+                row.fieldCropId(),
+                row.cropId(),
+                row.cropName(),
+                row.sowingDate(),
+                row.harvestDate(),
+                row.sownAreaHa(),
+                row.harvestAreaHa(),
+                row.actualYield(),
+                row.totalYield(),
+                row.plannedYield(),
+                row.forecastedYield(),
+                row.sourceData(),
+                row.sowingDetails(),
+                row.cropYear(),
+                row.analyticsDate(),
+                row.ndviUrl(),
+                row.ndviCreatedAt()
         );
     }
 

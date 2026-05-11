@@ -15,6 +15,8 @@ import com.geofields.security.GeoFieldsUserDetails;
 import com.geofields.service.OrgRegistrationInviteTokenService;
 import com.geofields.support.web.CsrfTokenReader;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -28,6 +30,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/org/manager")
 public class OrgManagerApiController {
+    private static final Logger log = LoggerFactory.getLogger(OrgManagerApiController.class);
 
     private final UserAccountRepository userAccountRepository;
     private final OrgRegistrationInviteRepository inviteRepository;
@@ -84,8 +87,13 @@ public class OrgManagerApiController {
     public ResponseEntity<ActionResult> approve(
             @AuthenticationPrincipal GeoFieldsUserDetails user,
             @RequestBody UserIdRequest body) {
-        int n = userAccountRepository.approveUser(body.userId(), user.getOrganizationId());
+        long actorUserId = user.getUserId();
+        long orgId = user.getOrganizationId();
+        long targetUserId = body.userId();
+        int n = userAccountRepository.approveUser(targetUserId, orgId);
         String msg = n == 1 ? "Пользователь принят." : "Заявка не найдена или уже обработана.";
+        log.info("userId={} orgId={} action=approve_registration targetUserId={} success={}",
+                actorUserId, orgId, targetUserId, n == 1);
         return ResponseEntity.ok(new ActionResult(n == 1, msg));
     }
 
@@ -93,16 +101,24 @@ public class OrgManagerApiController {
     public ResponseEntity<ActionResult> reject(
             @AuthenticationPrincipal GeoFieldsUserDetails user,
             @RequestBody UserIdRequest body) {
-        int n = userAccountRepository.rejectUser(body.userId(), user.getOrganizationId());
+        long actorUserId = user.getUserId();
+        long orgId = user.getOrganizationId();
+        long targetUserId = body.userId();
+        int n = userAccountRepository.rejectUser(targetUserId, orgId);
         String msg = n == 1 ? "Заявка отклонена." : "Заявка не найдена или уже обработана.";
+        log.info("userId={} orgId={} action=reject_registration targetUserId={} success={}",
+                actorUserId, orgId, targetUserId, n == 1);
         return ResponseEntity.ok(new ActionResult(n == 1, msg));
     }
 
     @PostMapping("/invite")
     public ResponseEntity<InviteCreated> createInvite(@AuthenticationPrincipal GeoFieldsUserDetails user) {
+        long actorUserId = user.getUserId();
+        long orgId = user.getOrganizationId();
         String token = inviteTokenService.newToken();
-        inviteRepository.insertInvite(user.getOrganizationId(), token, user.getUserId());
+        inviteRepository.insertInvite(orgId, token, actorUserId);
         String url = inviteTokenService.registerRelativeUrl(token);
+        log.info("userId={} orgId={} action=create_invite success=true", actorUserId, orgId);
         return ResponseEntity.ok(new InviteCreated(token, url, "Новая одноразовая ссылка создана."));
     }
 
@@ -110,7 +126,11 @@ public class OrgManagerApiController {
     public ResponseEntity<ActionResult> revokeInvite(
             @AuthenticationPrincipal GeoFieldsUserDetails user,
             @RequestBody TokenRequest body) {
-        inviteRepository.revokeToken(body.token().trim(), user.getOrganizationId());
+        long actorUserId = user.getUserId();
+        long orgId = user.getOrganizationId();
+        String trimmedToken = body.token().trim();
+        inviteRepository.revokeToken(trimmedToken, orgId);
+        log.info("userId={} orgId={} action=revoke_invite success=true", actorUserId, orgId);
         return ResponseEntity.ok(new ActionResult(true, "Приглашение отозвано."));
     }
 }

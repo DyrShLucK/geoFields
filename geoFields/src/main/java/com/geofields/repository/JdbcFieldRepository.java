@@ -1,23 +1,29 @@
 package com.geofields.repository;
 
+import com.geofields.repository.row.FieldGeometryConflictRow;
 import com.geofields.repository.row.FieldHistoryRow;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collection;
 import java.util.List;
 
 @Repository
 public class JdbcFieldRepository implements FieldRepository {
     private static final Logger log = LoggerFactory.getLogger(JdbcFieldRepository.class);
 
-    // Чтение полей с историей и последней NDVI-аналитикой по организации.
-    private static final String GET_FIELDS_WITH_HISTORY_SQL = """
+    private static final String HISTORY_SELECT_COLUMNS = """
             SELECT f.id                                      AS field_id,
                    f.field_name                              AS field_name,
                    f.field_area                              AS field_area,
+                   COALESCE(f.is_active, TRUE)               AS field_active,
                    ST_AsGeoJSON(f.geom)                      AS geometry,
                    fc.history_id                             AS field_crop_id,
                    c.crop_id                                 AS crop_id,
@@ -36,22 +42,76 @@ public class JdbcFieldRepository implements FieldRepository {
                    fa_latest.analytics_date                  AS analytics_date,
                    fa_latest.ndvi_url                        AS ndvi_url,
                    fa_latest.ndvi_created_at                 AS ndvi_created_at
-            FROM fields f
-                     INNER JOIN field_crops fc ON fc.field_id = f.id
-                     LEFT JOIN crops c ON c.crop_id = fc.crop_id
-                     LEFT JOIN LATERAL (
-                        SELECT fa.record_date AS analytics_date,
-                               nd.url         AS ndvi_url,
-                               nd.created_at  AS ndvi_created_at
-                        FROM field_analytics fa
-                        LEFT JOIN ndvi_data nd ON nd.id = fa.ndvi_id
-                        WHERE fa.field_crop_id = fc.history_id
-                        ORDER BY fa.record_date DESC, fa.id DESC
-                        LIMIT 1
-                     ) fa_latest ON TRUE
-            WHERE fc.organization_id = ?
+            """;
+
+    private static final String JOIN_CROPS_ON_CROP_ID = """
+            LEFT JOIN crops c ON c.crop_id = fc.crop_id
+            """;
+
+    private static final String JOIN_LATEST_NDVI_ANALYTICS = """
+            LEFT JOIN LATERAL (
+               SELECT fa.record_date AS analytics_date,
+                      nd.url         AS ndvi_url,
+                      nd.created_at  AS ndvi_created_at
+               FROM field_analytics fa
+               LEFT JOIN ndvi_data nd ON nd.id = fa.ndvi_id
+               WHERE fa.field_crop_id = fc.history_id
+               ORDER BY fa.record_date DESC, fa.id DESC
+               LIMIT 1
+            ) fa_latest ON TRUE
+            """;
+
+    private static final String HISTORY_ORDER_BY = """
             ORDER BY f.id, fc.crop_year NULLS LAST, fc.history_id
             """;
+
+    private static final String GET_FIELDS_WITH_HISTORY_SQL = HISTORY_SELECT_COLUMNS + """
+            FROM fields f
+            INNER JOIN field_crops fc ON fc.field_id = f.id
+            """ + JOIN_CROPS_ON_CROP_ID + JOIN_LATEST_NDVI_ANALYTICS + """
+            WHERE fc.organization_id = ?
+              AND COALESCE(f.is_active, TRUE)
+            """ + HISTORY_ORDER_BY;
+
+    private static final String GET_INTERSECTING_FIELDS_WITH_HISTORY_SQL = HISTORY_SELECT_COLUMNS + """
+            FROM field_intersections fi
+            JOIN fields f ON (
+               (fi.field_id_left = ? AND f.id = fi.field_id_right)
+               OR
+               (fi.field_id_right = ? AND f.id = fi.field_id_left)
+            )
+            LEFT JOIN field_crops fc ON fc.field_id = f.id AND fc.organization_id = fi.organization_id
+            """ + JOIN_CROPS_ON_CROP_ID + JOIN_LATEST_NDVI_ANALYTICS + """
+            WHERE fi.organization_id = ?
+            """ + HISTORY_ORDER_BY;
+
+    private static final RowMapper<FieldHistoryRow> FIELD_HISTORY_ROW_MAPPER = (rs, rowNum) -> new FieldHistoryRow(
+            rs.getLong("field_id"),
+            rs.getString("field_name"),
+            rs.getBigDecimal("field_area"),
+            Boolean.TRUE.equals(rs.getObject("field_active", Boolean.class)),
+            rs.getString("geometry"),
+            toLong(rs.getObject("field_crop_id")),
+            toLong(rs.getObject("crop_id")),
+            rs.getString("crop_name"),
+            rs.getObject("sowing_date", java.time.LocalDate.class),
+            rs.getObject("harvest_date", java.time.LocalDate.class),
+            rs.getBigDecimal("sown_area_ha"),
+            rs.getBigDecimal("harvest_area_ha"),
+            rs.getBigDecimal("actual_yield"),
+            rs.getBigDecimal("total_yield"),
+            rs.getBigDecimal("planned_yield"),
+            rs.getBigDecimal("forecasted_yield"),
+            rs.getString("source_data"),
+            rs.getString("sowing_details"),
+            rs.getObject("crop_year", Integer.class),
+            rs.getObject("analytics_date", java.time.LocalDate.class),
+            rs.getString("ndvi_url"),
+            rs.getObject("ndvi_created_at", java.time.LocalDateTime.class)
+    );
+
+    private static final RowMapper<FieldGeometryConflictRow> FIELD_GEOMETRY_CONFLICT_ROW_MAPPER =
+            (rs, rowNum) -> new FieldGeometryConflictRow(rs.getLong("id"), rs.getString("field_name"));
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -67,11 +127,78 @@ public class JdbcFieldRepository implements FieldRepository {
             )
             """;
 
+    private static final String UPDATE_FIELD_ACTIVE_STATUS_SQL = """
+            UPDATE fields f
+            SET is_active = ?
+            WHERE f.id = ?
+              AND EXISTS (
+                    SELECT 1
+                    FROM field_crops fc
+                    WHERE fc.field_id = f.id AND fc.organization_id = ?
+                )
+            """;
+
+    private static final String DELETE_FIELD_SQL = """
+            DELETE FROM fields
+            WHERE id = ?
+            """;
+
+    private static final String DELETE_FIELD_CROPS_SQL = """
+            DELETE FROM field_crops
+            WHERE field_id = ?
+              AND organization_id = ?
+            """;
+
+    private static final String DELETE_FIELD_ANALYTICS_SQL = """
+            DELETE FROM field_analytics
+            WHERE field_crop_id IN (
+                SELECT history_id
+                FROM field_crops
+                WHERE field_id = ?
+                  AND organization_id = ?
+            )
+            """;
+
+    private static final String INSERT_FIELD_SQL = """
+            INSERT INTO fields (geom, field_name, field_area, is_active)
+            VALUES (
+                ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)),
+                ?,
+                ST_Area(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography) / 10000.0,
+                TRUE
+            )
+            """;
+
+    private static final String INSERT_FIELD_INTERSECTION_SQL = """
+            INSERT INTO field_intersections (organization_id, field_id_left, field_id_right)
+            VALUES (?, LEAST(?, ?), GREATEST(?, ?))
+            ON CONFLICT (field_id_left, field_id_right) DO NOTHING
+            """;
+
+    private static final String DELETE_FIELD_INTERSECTIONS_BY_FIELD_SQL = """
+            DELETE FROM field_intersections
+            WHERE field_id_left = ? OR field_id_right = ?
+            """;
+
+    private static final String INTERSECTING_FIELDS_SQL = """
+            SELECT DISTINCT f.id, f.field_name
+            FROM fields f
+            INNER JOIN field_crops fc ON fc.field_id = f.id AND fc.organization_id = ?
+            WHERE f.geom IS NOT NULL
+              AND ST_Intersects(
+                    f.geom,
+                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)
+                  )
+            """;
+
+    private static final String INTERSECTING_FIELDS_EXCLUDE_SQL = INTERSECTING_FIELDS_SQL + """
+              AND f.id <> ?
+            """;
+
     @Override
     public List<FieldHistoryRow> findAllFieldsWithHistory(Long organizationId) {
         try {
             List<FieldHistoryRow> rows = queryWithHistory(organizationId);
-            log.info("Loaded {} field history rows for organization {}", rows.size(), organizationId);
             return rows;
         } catch (DataAccessException mainEx) {
             log.error("Field history SQL failed. Please check DB schema names and column types.", mainEx);
@@ -89,40 +216,104 @@ public class JdbcFieldRepository implements FieldRepository {
         return Boolean.TRUE.equals(exists);
     }
 
+    @Override
+    public int updateFieldActiveStatus(long fieldId, long organizationId, boolean active) {
+        return jdbcTemplate.update(
+                UPDATE_FIELD_ACTIVE_STATUS_SQL,
+                active,
+                fieldId,
+                organizationId);
+    }
+
+    @Override
+    @Transactional
+    public int deleteField(long fieldId, long organizationId) {
+        if (!fieldBelongsToOrganization(fieldId, organizationId)) {
+            return 0;
+        }
+        jdbcTemplate.update(DELETE_FIELD_INTERSECTIONS_BY_FIELD_SQL, fieldId, fieldId);
+        jdbcTemplate.update(DELETE_FIELD_ANALYTICS_SQL, fieldId, organizationId);
+        jdbcTemplate.update(DELETE_FIELD_CROPS_SQL, fieldId, organizationId);
+        return jdbcTemplate.update(DELETE_FIELD_SQL, fieldId);
+    }
+
+    @Override
+    public List<FieldHistoryRow> findIntersectingFieldsWithHistory(long organizationId, long fieldId) {
+        return jdbcTemplate.query(
+                GET_INTERSECTING_FIELDS_WITH_HISTORY_SQL,
+                FIELD_HISTORY_ROW_MAPPER,
+                fieldId,
+                fieldId,
+                organizationId);
+    }
+
+    @Override
+    public long insertField(String fieldName, String geometryGeoJson) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            var ps = connection.prepareStatement(INSERT_FIELD_SQL, new String[]{"id"});
+            ps.setString(1, geometryGeoJson);
+            ps.setString(2, fieldName);
+            ps.setString(3, geometryGeoJson);
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new IllegalStateException("Не удалось получить id поля после INSERT");
+        }
+        return key.longValue();
+    }
+
+    @Override
+    public void saveFieldIntersections(long organizationId, long fieldId, Collection<Long> intersectingFieldIds) {
+        if (intersectingFieldIds == null || intersectingFieldIds.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.update(
+                DELETE_FIELD_INTERSECTIONS_BY_FIELD_SQL,
+                fieldId,
+                fieldId);
+        jdbcTemplate.batchUpdate(
+                INSERT_FIELD_INTERSECTION_SQL,
+                intersectingFieldIds,
+                intersectingFieldIds.size(),
+                (ps, otherFieldId) -> {
+                    ps.setLong(1, organizationId);
+                    ps.setLong(2, fieldId);
+                    ps.setLong(3, otherFieldId);
+                    ps.setLong(4, fieldId);
+                    ps.setLong(5, otherFieldId);
+                });
+    }
+
+    @Override
+    public List<FieldGeometryConflictRow> findFieldsIntersectingGeometry(
+            long organizationId,
+            String geometryGeoJson,
+            Long excludeFieldId) {
+        if (excludeFieldId == null) {
+            return jdbcTemplate.query(
+                    INTERSECTING_FIELDS_SQL,
+                    FIELD_GEOMETRY_CONFLICT_ROW_MAPPER,
+                    organizationId,
+                    geometryGeoJson);
+        }
+        return jdbcTemplate.query(
+                INTERSECTING_FIELDS_EXCLUDE_SQL,
+                FIELD_GEOMETRY_CONFLICT_ROW_MAPPER,
+                organizationId,
+                geometryGeoJson,
+                excludeFieldId);
+    }
+
     private List<FieldHistoryRow> queryWithHistory(Long organizationId) {
         return jdbcTemplate.query(
                 GET_FIELDS_WITH_HISTORY_SQL,
                 ps -> ps.setLong(1, organizationId),
-                (rs, rowNum) -> mapHistoryRow(rs));
+                FIELD_HISTORY_ROW_MAPPER);
     }
 
-    private FieldHistoryRow mapHistoryRow(java.sql.ResultSet rs) throws java.sql.SQLException {
-        return new FieldHistoryRow(
-                rs.getLong("field_id"),
-                rs.getString("field_name"),
-                rs.getBigDecimal("field_area"),
-                rs.getString("geometry"),
-                toLong(rs.getObject("field_crop_id")),
-                toLong(rs.getObject("crop_id")),
-                rs.getString("crop_name"),
-                rs.getObject("sowing_date", java.time.LocalDate.class),
-                rs.getObject("harvest_date", java.time.LocalDate.class),
-                rs.getBigDecimal("sown_area_ha"),
-                rs.getBigDecimal("harvest_area_ha"),
-                rs.getBigDecimal("actual_yield"),
-                rs.getBigDecimal("total_yield"),
-                rs.getBigDecimal("planned_yield"),
-                rs.getBigDecimal("forecasted_yield"),
-                rs.getString("source_data"),
-                rs.getString("sowing_details"),
-                rs.getObject("crop_year", Integer.class),
-                rs.getObject("analytics_date", java.time.LocalDate.class),
-                rs.getString("ndvi_url"),
-                rs.getObject("ndvi_created_at", java.time.LocalDateTime.class)
-        );
-    }
-
-    private Long toLong(Object value) {
+    private static Long toLong(Object value) {
         if (value == null) {
             return null;
         }

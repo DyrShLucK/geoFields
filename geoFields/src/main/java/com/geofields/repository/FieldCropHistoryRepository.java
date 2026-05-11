@@ -13,11 +13,17 @@ public interface FieldCropHistoryRepository {
 
     List<FieldOptionRow> listFieldsForOrganization(long organizationId);
 
+    List<FieldOptionRow> listObsoleteFieldsForOrganization(long organizationId);
+
     List<CropOptionRow> listAllCrops();
 
     List<FieldCropHistoryRow> findHistoryByFieldAndOrganization(long fieldId, long organizationId);
 
     boolean historyBelongsToOrganization(long historyId, long organizationId);
+
+    long countHistoryByFieldAndOrganization(long fieldId, long organizationId);
+
+    Optional<Long> findFieldIdByHistoryId(long historyId, long organizationId);
 
     long insertHistory(
             long fieldId,
