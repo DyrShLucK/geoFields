@@ -3,19 +3,12 @@
 ## Запуск через Docker
 Если есть изменения в коде
 
-Из корня проекта:
-
-```bash
-cd "/geoFields"
-./gradlew clean bootJar
-cd "../"
-```
-Если нет изменений
 
 ```
 docker compose down -v
 docker compose up -d
 ```
+
 
 Примечания:
 - `docker compose down -v` удаляет volume БД и при следующем старте заново импортирует бэкап.
@@ -83,6 +76,7 @@ cd "./geoFields"
 - HTML-шаблоны: `geoFields/src/main/resources/templates/`
 - CSS: `geoFields/src/main/resources/static/css/`
 - JavaScript: `geoFields/src/main/resources/static/js/`
+- Можно менять эти файлы, и перезапускать контейнер приложения, тогда изменения применятся ```docker compose restart app```
 
 ## Для запросов через postman или api
 
