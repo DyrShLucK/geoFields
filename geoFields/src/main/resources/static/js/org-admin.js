@@ -4,6 +4,7 @@
  */
 (function () {
     const API = '/api/org/admin';
+    const AGRONOMIST_API = '/api/org/agronomist';
     const fetchOpts = { credentials: 'same-origin' };
 
     /** Подписи в выпадающем списке ролей (значения должны совпадать с enum на бэкенде). */
@@ -26,6 +27,7 @@
     }
 
     let lastCsrf = null;
+    let lastFields = [];
 
     function showBanner(text, isError) {
         const el = document.getElementById('banner');
@@ -75,57 +77,91 @@
         const mw = document.getElementById('members-wrap');
         if (!data.members || data.members.length === 0) {
             mw.innerHTML = '<p>Нет пользователей.</p>';
-            return;
-        }
-        let rows = data.members.map(function (m) {
-            const st = escapeHtml(m.registrationStatus) + (m.active ? '' : ' · неактивен');
-            const who = escapeHtml(m.lastName) + ' ' + escapeHtml(m.firstName) + ' ' + escapeHtml(m.middleName);
-            const dis = m.currentUser;
-            return '<tr data-id="' + m.id + '">' +
-                '<td>' + who.trim() + '</td>' +
-                '<td>' + escapeHtml(m.login) + '</td>' +
-                '<td>' + escapeHtml(m.email) + '</td>' +
-                '<td>' + escapeHtml(st) + '</td>' +
-                '<td>' + roleSelectHtml(m.role, m.id, dis) + '</td>' +
-                '<td><button type="button" class="primary" data-act="save-role" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Сохранить роль</button></td>' +
-                '<td><button type="button" class="danger" data-act="delete" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Удалить</button></td>' +
-                '</tr>';
-        }).join('');
-        mw.innerHTML = '<table><thead><tr><th>ФИО</th><th>Логин</th><th>Email</th><th>Статус</th><th>Роль</th><th></th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+        } else {
+            let rows = data.members.map(function (m) {
+                const st = escapeHtml(m.registrationStatus) + (m.active ? '' : ' · неактивен');
+                const who = escapeHtml(m.lastName) + ' ' + escapeHtml(m.firstName) + ' ' + escapeHtml(m.middleName);
+                const dis = m.currentUser;
+                return '<tr data-id="' + m.id + '">' +
+                    '<td>' + who.trim() + '</td>' +
+                    '<td>' + escapeHtml(m.login) + '</td>' +
+                    '<td>' + escapeHtml(m.email) + '</td>' +
+                    '<td>' + escapeHtml(st) + '</td>' +
+                    '<td>' + roleSelectHtml(m.role, m.id, dis) + '</td>' +
+                    '<td><button type="button" class="primary" data-act="save-role" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Сохранить роль</button></td>' +
+                    '<td><button type="button" class="danger" data-act="delete" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Удалить</button></td>' +
+                    '</tr>';
+            }).join('');
+            mw.innerHTML = '<table><thead><tr><th>ФИО</th><th>Логин</th><th>Email</th><th>Статус</th><th>Роль</th><th></th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
 
-        document.querySelectorAll('button[data-act="save-role"]').forEach(function (btn) {
-            btn.addEventListener('click', onSaveRole);
-        });
-        document.querySelectorAll('button[data-act="delete"]').forEach(function (btn) {
-            btn.addEventListener('click', onDelete);
-        });
+            document.querySelectorAll('button[data-act="save-role"]').forEach(function (btn) {
+                btn.addEventListener('click', onSaveRole);
+            });
+            document.querySelectorAll('button[data-act="delete"]').forEach(function (btn) {
+                btn.addEventListener('click', onDelete);
+            });
+        }
+        await loadFields();
     }
 
     function selectForRow(userId) {
         return document.querySelector('select[data-user-id="' + userId + '"]');
     }
 
-    /** POST с разбором ответа: у бэкенда ошибки API могут идти как 200 + { ok: false }. */
-    async function apiPost(path, body) {
+    function parseOptionalJson(text) {
+        try {
+            return text ? JSON.parse(text) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    /** JSON-запросы с разбором ответа: у бэкенда ошибки API могут идти как 200 + { ok: false }. */
+    async function apiJsonCall(method, path, body) {
         const res = await fetch(API + path, {
-            method: 'POST',
+            method: method,
             credentials: 'same-origin',
             headers: postHeaders(lastCsrf),
-            body: JSON.stringify(body),
+            body: body == null ? undefined : JSON.stringify(body),
         });
         const text = await res.text();
-        let payload = null;
-        try {
-            payload = text ? JSON.parse(text) : null;
-        } catch (_) { /* empty */ }
+        const payload = parseOptionalJson(text);
         if (!res.ok) {
-            showBanner('Ошибка ' + res.status + (payload && payload.detail ? ': ' + payload.detail : ''), true);
-            return;
+            const detail = payload && (payload.detail || payload.message);
+            showBanner('Ошибка ' + res.status + (detail ? ': ' + detail : ''), true);
+            return { ok: false, res: res, payload: payload };
         }
         if (payload && payload.message) {
             showBanner(payload.message, payload.ok === false);
         }
         await loadSummary();
+        return { ok: true, res: res, payload: payload };
+    }
+
+    function fillFieldSelect(fields) {
+        const sel = document.getElementById('field-select');
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— выберите поле —</option>' +
+            fields.map(function (f) {
+                return '<option value="' + f.fieldId + '">' + escapeHtml(f.fieldName) + '</option>';
+            }).join('');
+        if (current && fields.some(function (f) { return String(f.fieldId) === current; })) {
+            sel.value = current;
+        }
+        document.getElementById('fields-wrap').textContent = fields.length
+            ? ('Активных полей в списке: ' + fields.length)
+            : 'Активных полей не найдено.';
+    }
+
+    async function loadFields() {
+        const res = await fetch(AGRONOMIST_API + '/summary', fetchOpts);
+        if (!res.ok) {
+            document.getElementById('fields-wrap').textContent = 'Не удалось загрузить список полей.';
+            return;
+        }
+        const data = await res.json();
+        lastFields = data.fields || [];
+        fillFieldSelect(lastFields);
     }
 
     function onSaveRole(ev) {
@@ -133,15 +169,30 @@
         const id = parseInt(btn.getAttribute('data-id'), 10);
         const sel = selectForRow(id);
         if (!sel) return;
-        apiPost('/role', { userId: id, role: sel.value });
+        apiJsonCall('POST', '/role', { userId: id, role: sel.value });
     }
 
     function onDelete(ev) {
         const btn = ev.currentTarget;
         const id = parseInt(btn.getAttribute('data-id'), 10);
         if (!confirm('Удалить пользователя #' + id + '? Действие необратимо.')) return;
-        apiPost('/delete', { userId: id });
+        apiJsonCall('POST', '/delete', { userId: id });
     }
+
+    document.getElementById('btn-delete-field').addEventListener('click', function () {
+        const sel = document.getElementById('field-select');
+        const fieldId = parseInt(sel.value, 10);
+        if (!fieldId) {
+            showBanner('Выберите поле для удаления.', true);
+            return;
+        }
+        const field = lastFields.find(function (f) { return f.fieldId === fieldId; });
+        const fieldName = field && field.fieldName ? field.fieldName : ('#' + String(fieldId));
+        if (!confirm('Удалить поле "' + fieldName + '"? История и связанные записи тоже будут удалены.')) {
+            return;
+        }
+        apiJsonCall('DELETE', '/fields/' + fieldId, null);
+    });
 
     loadSummary().catch(function () {
         showBanner('Ошибка сети при загрузке страницы.', true);

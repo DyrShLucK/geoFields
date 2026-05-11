@@ -4,11 +4,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
-// Плоская строка результата JOIN по полю и его истории.
 public record FieldHistoryRow(
         Long fieldId,
         String fieldName,
         BigDecimal fieldArea,
+        boolean active,
         String geometryJson,
         Long fieldCropId,
         Long cropId,

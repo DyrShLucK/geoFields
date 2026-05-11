@@ -21,6 +21,10 @@ docker compose up -d
 - `docker compose down -v` удаляет volume БД и при следующем старте заново импортирует бэкап.
 - Бэкап поднимается из `LAST_BCUP_BD.sql` во время инициализации Postgres.
 - Приложение доступно по адресу `http://localhost:8080` (или другой порт из `docker-compose.yml`).
+- Режим `html/css/js` выбирается сверху в `docker-compose.yml` через `SPRING_PROFILES_ACTIVE`.
+- `SPRING_PROFILES_ACTIVE: live-ui` - `html`, `css` и `js` берутся из `geoFields/src/main/resources/templates` и `geoFields/src/main/resources/static`, изменения применяются после `docker compose restart app`.
+- `SPRING_PROFILES_ACTIVE: ""` - `html`, `css` и `js` берутся только из `app.jar`.
+- Если менялся Java-код, как и раньше нужно сначала выполнить `./gradlew clean bootJar`, потому что приложение запускается из `jar`.
 
 Полезные команды:
 
@@ -62,6 +66,17 @@ cd "./geoFields"
 
 - Основная OpenAPI спецификация бэкенда: `geoFields/src/main/resources/static/OpenAPIspec.yaml`
 - Спецификация внешнего NDVI API: `geoFields/src/main/resources/static/ndvi-outbound-api.yaml`
+
+## Кратко по эндпоинтам
+
+- `GET /api/session/context` - возвращает контекст текущей сессии, роль пользователя и CSRF-данные для UI.
+- `GET /get_fields` и `GET /api/fields/{fieldId}/intersections` - отдают поля организации в формате GeoJSON и позволяют получить пересечения по выбранному полю.
+- `GET /get_ndvi_value`, `GET /get_ndvi_by_id`, `GET /get_all_ndvi_tile` - NDVI-запросы: значение в точке, слой по одному полю и слой по набору полей/по всей организации.
+- `/api/org/manager/*` - сводка менеджера организации, обработка заявок на регистрацию и управление инвайт-ссылками.
+- `/api/org/admin/*` - просмотр участников организации, смена ролей, удаление пользователей и удаление полей.
+- `/api/org/agronomist/*` - сводка агронома, CRUD по истории культур, создание нового поля и смена статуса поля (`ACTIVE` / `OBSOLETE`).
+
+Для большинства JSON-эндпоинтов нужна авторизованная сессия (`JSESSIONID`), а для изменяющих запросов дополнительно нужен CSRF-токен (`X-XSRF-TOKEN`). Полные схемы запросов и ответов описаны в `OpenAPIspec.yaml`.
 
 ## Где находятся HTML/CSS/JS
 

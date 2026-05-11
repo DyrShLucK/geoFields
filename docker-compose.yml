@@ -1,3 +1,21 @@
+x-app-environment: &app-environment
+  # UI mode:
+  # - live-ui: html/css/js are loaded from mounted folders and apply after `docker compose restart app`
+  # - ""      : html/css/js are loaded only from app.jar
+  SPRING_PROFILES_ACTIVE: live-ui
+  DB_URL: jdbc:postgresql://db:5432/geofields
+  DB_USERNAME: postgres
+  DB_PASSWORD: 12345
+  REDIS_HOST: redis
+  REDIS_PORT: 6379
+  REDIS_PASSWORD: ""
+  SERVER_PORT: 8080
+
+x-app-volumes: &app-volumes
+  - ./geoFields/build/libs/geoFields-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+  - ./geoFields/src/main/resources/templates:/app/live-resources/templates:ro
+  - ./geoFields/src/main/resources/static:/app/live-resources/static:ro
+
 services:
   db:
     image: postgis/postgis:17-3.5
@@ -43,18 +61,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    environment:
-      DB_URL: jdbc:postgresql://db:5432/geofields
-      DB_USERNAME: postgres
-      DB_PASSWORD: 12345
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ""
-      SERVER_PORT: 8080
+    environment: *app-environment
     working_dir: /app
     command: ["java", "-jar", "/app/app.jar"]
-    volumes:
-      - ./geoFields/build/libs/geoFields-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
+    volumes: *app-volumes
     ports:
       - "8080:8080"
 

@@ -31,6 +31,7 @@ class FieldRepositoryTest {
                         10L,
                         "North field",
                         new BigDecimal("12.34"),
+                        true,
                         "{\"type\":\"Polygon\",\"coordinates\":[[[1,2],[3,4],[1,2]]]}",
                         100L,
                         5L,
