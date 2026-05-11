@@ -1,6 +1,7 @@
 /**
  * Страница агронома: выбор поля и правка истории посевов (field_crops).
  */
+console.log('agronomist.js loaded');
 (function () {
     const API = '/api/org/agronomist';
     const fetchOpts = { credentials: 'same-origin' };
@@ -41,6 +42,26 @@
             .replace(/"/g, '&quot;');
     }
 
+    function parseOptionalJson(text) {
+        try {
+            return text ? JSON.parse(text) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function httpErrorBanner(status, payload) {
+        const msg = payload && payload.message ? ': ' + payload.message : '';
+        return 'Ошибка ' + status + msg;
+    }
+
+    async function fetchJsonWithOptionalMessage(url, init) {
+        const res = await fetch(url, init);
+        const text = await res.text();
+        const payload = parseOptionalJson(text);
+        return { res: res, payload: payload };
+    }
+
     function numOrNull(id) {
         const el = document.getElementById(id);
         const v = el.value.trim();
@@ -57,6 +78,16 @@
     function strOrNull(id) {
         const v = document.getElementById(id).value.trim();
         return v === '' ? null : v;
+    }
+
+    function clearFieldIdFromQuery() {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.has('fieldId')) {
+            return;
+        }
+        url.searchParams.delete('fieldId');
+        const next = url.pathname + (url.searchParams.toString() ? ('?' + url.searchParams.toString()) : '') + url.hash;
+        window.history.replaceState({}, '', next);
     }
 
     function buildPayload() {
@@ -99,6 +130,39 @@
         if (keep && fields.some(function (f) { return String(f.fieldId) === keep; })) {
             sel.value = keep;
         }
+    }
+
+    function fillObsoleteFieldSelect(fields) {
+        const sel = document.getElementById('obsolete-field-select');
+        const keep = sel.value;
+        sel.innerHTML = '<option value="">— выберите поле —</option>' +
+            fields.map(function (f) {
+                return '<option value="' + f.fieldId + '">' + escapeHtml(f.fieldName) + '</option>';
+            }).join('');
+        if (keep && fields.some(function (f) { return String(f.fieldId) === keep; })) {
+            sel.value = keep;
+        }
+    }
+
+    function selectedFieldMeta() {
+        if (!summaryData || !summaryData.fields || !selectedFieldId) {
+            return null;
+        }
+        return summaryData.fields.find(function (f) { return f.fieldId === selectedFieldId; }) || null;
+    }
+
+    function refreshFieldActions() {
+        const wrap = document.getElementById('field-actions');
+        const nameEl = document.getElementById('selected-field-name');
+        const meta = selectedFieldMeta();
+        if (!wrap || !nameEl) return;
+        if (!meta) {
+            wrap.style.display = 'none';
+            nameEl.textContent = '—';
+            return;
+        }
+        nameEl.textContent = meta.fieldName || ('#' + String(meta.fieldId));
+        wrap.style.display = 'block';
     }
 
     function clearForm() {
@@ -169,9 +233,14 @@
             ul.textContent = 'Вы: ' + (summaryData.currentUserFullName || summaryData.currentLogin || '');
         }
         fillFieldSelect(summaryData.fields || []);
+        fillObsoleteFieldSelect(summaryData.obsoleteFields || []);
         fillCropSelect(summaryData.crops || []);
-        if (!summaryData.fields || summaryData.fields.length === 0) {
+        refreshFieldActions();
+        if ((!summaryData.fields || summaryData.fields.length === 0) &&
+            (!summaryData.obsoleteFields || summaryData.obsoleteFields.length === 0)) {
             showBanner('Нет полей с историей посевов. Сначала должна существовать хотя бы одна запись field_crops для поля организации.', true);
+        } else if (!summaryData.fields || summaryData.fields.length === 0) {
+            showBanner('Активных полей нет. Можно вернуть поле из списка устаревших ниже.', false);
         } else {
             await applyFieldIdFromQuery();
         }
@@ -185,6 +254,7 @@
             return;
         }
         selectedFieldId = fieldId;
+        refreshFieldActions();
         showBanner('', false);
         const res = await fetch(API + '/fields/' + fieldId + '/history', fetchOpts);
         if (!res.ok) {
@@ -227,16 +297,13 @@
             btn.addEventListener('click', async function () {
                 const id = parseInt(btn.getAttribute('data-id'), 10);
                 if (!confirm('Удалить запись #' + id + '?')) return;
-                const res = await fetch(API + '/history/' + id, {
+                const { res, payload } = await fetchJsonWithOptionalMessage(API + '/history/' + id, {
                     method: 'DELETE',
                     credentials: 'same-origin',
                     headers: mutatingHeaders(),
                 });
-                const text = await res.text();
-                let payload = null;
-                try { payload = text ? JSON.parse(text) : null; } catch (_) { /* empty */ }
                 if (!res.ok) {
-                    showBanner('Ошибка ' + res.status + (payload && payload.message ? ': ' + payload.message : ''), true);
+                    showBanner(httpErrorBanner(res.status, payload), true);
                     return;
                 }
                 if (payload && payload.message) showBanner(payload.message, false);
@@ -250,6 +317,61 @@
         loadHistory().catch(function () {
             showBanner('Ошибка сети.', true);
         });
+    });
+
+    document.getElementById('btn-mark-obsolete').addEventListener('click', async function () {
+        const meta = selectedFieldMeta();
+        if (!meta) {
+            showBanner('Сначала выберите поле.', true);
+            return;
+        }
+        if (!confirm('Пометить поле "' + meta.fieldName + '" как устаревшее?')) return;
+        const { res, payload } = await fetchJsonWithOptionalMessage(API + '/fields/' + meta.fieldId + '/status', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: mutatingHeaders(),
+            body: JSON.stringify({ status: 'OBSOLETE' }),
+        });
+        if (!res.ok) {
+            showBanner(httpErrorBanner(res.status, payload), true);
+            return;
+        }
+        selectedFieldId = null;
+        lastHistoryRows = [];
+        document.getElementById('field-select').value = '';
+        document.getElementById('history-card').style.display = 'none';
+        document.getElementById('form-card').style.display = 'none';
+        refreshFieldActions();
+        clearFieldIdFromQuery();
+        await loadSummary();
+        if (payload && payload.message) showBanner(payload.message, false);
+    });
+
+    document.getElementById('btn-restore-field').addEventListener('click', async function () {
+        const sel = document.getElementById('obsolete-field-select');
+        const fieldId = parseInt(sel.value, 10);
+        if (!fieldId) {
+            showBanner('Выберите устаревшее поле.', true);
+            return;
+        }
+        const meta = (summaryData && summaryData.obsoleteFields || []).find(function (f) {
+            return f.fieldId === fieldId;
+        });
+        const fieldName = meta && meta.fieldName ? meta.fieldName : ('#' + String(fieldId));
+        if (!confirm('Вернуть поле "' + fieldName + '" в активные?')) return;
+        const { res, payload } = await fetchJsonWithOptionalMessage(API + '/fields/' + fieldId + '/status', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: mutatingHeaders(),
+            body: JSON.stringify({ status: 'ACTIVE' }),
+        });
+        if (!res.ok) {
+            showBanner(httpErrorBanner(res.status, payload), true);
+            return;
+        }
+        document.getElementById('obsolete-field-select').value = '';
+        if (payload && payload.message) showBanner(payload.message, false);
+        await loadSummary();
     });
 
     document.getElementById('btn-cancel-edit').addEventListener('click', function () {
@@ -274,17 +396,14 @@
             ? API + '/history/' + editingHistoryId
             : API + '/fields/' + selectedFieldId + '/history';
         const method = editingHistoryId != null ? 'PUT' : 'POST';
-        const res = await fetch(url, {
+        const { res, payload } = await fetchJsonWithOptionalMessage(url, {
             method: method,
             credentials: 'same-origin',
             headers: mutatingHeaders(),
             body: JSON.stringify(body),
         });
-        const text = await res.text();
-        let payload = null;
-        try { payload = text ? JSON.parse(text) : null; } catch (_) { /* empty */ }
         if (!res.ok) {
-            showBanner('Ошибка ' + res.status + (payload && payload.message ? ': ' + payload.message : ''), true);
+            showBanner(httpErrorBanner(res.status, payload), true);
             return;
         }
         if (payload && payload.message) showBanner(payload.message, false);

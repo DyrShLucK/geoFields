@@ -13,7 +13,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-// Читает данные полей и собирает GeoJSON-ответы.
 @Service
 public class FieldGeoJsonQueryService {
 
@@ -28,14 +27,21 @@ public class FieldGeoJsonQueryService {
     }
 
     public FieldFeatureCollectionDto loadForOrganization(Long organizationId) {
-        List<FieldHistoryRow> rows = fieldRepository.findAllFieldsWithHistory(organizationId);
-        log.info("Repository returned {} joined rows for /get_fields, org={}", rows.size(), organizationId);
-        FieldFeatureCollectionDto dto = assembler.toFeatureCollection(rows);
-        log.info("Built {} GeoJSON features for /get_fields", dto.features().size());
-        return dto;
+        return buildFeatureCollection(
+                fieldRepository.findAllFieldsWithHistory(organizationId),
+                "/get_fields",
+                organizationId,
+                null);
     }
 
-    /** Возвращает подмножество Feature по списку field id. */
+    public FieldFeatureCollectionDto loadIntersectingForField(Long organizationId, Long fieldId) {
+        return buildFeatureCollection(
+                fieldRepository.findIntersectingFieldsWithHistory(organizationId, fieldId),
+                "intersections",
+                organizationId,
+                fieldId);
+    }
+
     public FieldFeatureCollectionDto loadFeatureSubsetByFieldIds(Long organizationId, Collection<Long> fieldIds) {
         if (fieldIds == null || fieldIds.isEmpty()) {
             return new FieldFeatureCollectionDto("FeatureCollection", List.of());
@@ -48,5 +54,18 @@ public class FieldGeoJsonQueryService {
                 .filter(f -> wanted.contains(f.id()))
                 .toList();
         return new FieldFeatureCollectionDto("FeatureCollection", filtered);
+    }
+
+    private FieldFeatureCollectionDto buildFeatureCollection(
+            List<FieldHistoryRow> rows,
+            String sourceLabel,
+            Long organizationId,
+            Long fieldId) {
+
+
+        FieldFeatureCollectionDto dto = assembler.toFeatureCollection(rows);
+
+
+        return dto;
     }
 }

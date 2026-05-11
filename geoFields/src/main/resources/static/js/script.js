@@ -3,8 +3,8 @@
  * Запросы к своему же origin с cookie сессии — бэкенд знает организацию и пользователя.
  */
 
-//const API_URL = "";
-const API_URL = "http://localhost:8080"; //раскоментируй если запускаешь файлом
+// const API_URL = "";
+const API_URL = "http://localhost:8080"; // раскомментируй, если открываешь HTML файлом (file://)
 
 const _apiBase = String(API_URL || "").trim().replace(/\/$/, "");
 
@@ -14,6 +14,19 @@ function apiPath(path) {
     const p = path.startsWith("/") ? path : "/" + path;
     return _apiBase ? _apiBase + p : p;
 }
+
+let loadedFieldsGeoJson = null;
+let loadedIntersectingGeoJson = { type: 'FeatureCollection', features: [] };
+let activePopup = null;
+const popupFieldCache = new Map();
+
+let selectedFieldDbId = null;
+let canOpenAgronomistPage = false;
+let selectedMaplibreId = null;
+
+const INTERSECTIONS_SOURCE_ID = 'intersections-source';
+const INTERSECTIONS_FILL_ID = 'intersections-fill';
+const INTERSECTIONS_OUTLINE_ID = 'intersections-outline';
 
 /**
  * Подтягивает данные текущего пользователя с API (HTML главной без Thymeleaf).
@@ -56,7 +69,6 @@ async function loadSessionContext() {
     if (d.agronomist || d.admin) {
         el("link-org-agronomist").style.display = "block";
     }
-    /** Агроном и администратор организации — страница истории посевов и ссылка из popup. */
     canOpenAgronomistPage = !!(d.agronomist || d.admin);
     updateAgronomistHistoryLink();
 }
@@ -107,16 +119,6 @@ function updateAgronomistHistoryLink() {
         hint.textContent = "Поле не выбрано.";
     }
 }
-
-// GeoJSON полей после загрузки — список id для NDVI «все поля».
-let loadedFieldsGeoJson = null;
-
-// id поля в БД (из properties фичи GeoJSON) — для запросов NDVI по одному полю.
-let selectedFieldDbId = null;
-/** Доступ к /org/agronomist: агроном или админ организации. */
-let canOpenAgronomistPage = false;
-// Внутренний id объекта на карте (feature-state «выбран») — для подсветки полигона.
-let selectedMaplibreId = null;
 
 // Карта: два растровых подложки переключаются чекбоксами в панели слоёв.
 const map = new maplibregl.Map({
@@ -237,6 +239,8 @@ function setupLayerControls() {
         const state = e.target.checked ? 'visible' : 'none';
         map.setLayoutProperty('fields-fill', 'visibility', state);
         map.setLayoutProperty('fields-outline', 'visibility', state);
+        if (map.getLayer(INTERSECTIONS_FILL_ID)) map.setLayoutProperty(INTERSECTIONS_FILL_ID, 'visibility', state);
+        if (map.getLayer(INTERSECTIONS_OUTLINE_ID)) map.setLayoutProperty(INTERSECTIONS_OUTLINE_ID, 'visibility', state);
     });
 
     document.getElementById('toggle-ndvi').addEventListener('change', (e) => {
@@ -245,12 +249,85 @@ function setupLayerControls() {
     });
 }
 
+function openFieldPopup(lngLat, props, history, isAgronomist, intersectingFeatures) {
+    const key = String(props.id);
+    popupFieldCache.set(key, {
+        props: props,
+        history: history,
+        isAgronomist: !!isAgronomist,
+        intersectingFeatures: Array.isArray(intersectingFeatures) ? intersectingFeatures : null
+    });
+
+    if (activePopup) {
+        activePopup.remove();
+    }
+    const popup = new maplibregl.Popup({ closeButton: true, className: 'custom-popup' })
+        .setLngLat(lngLat)
+        .setMaxWidth('420px')
+        .setHTML(fieldPopupHtml(props, history, isAgronomist, intersectingFeatures))
+        .addTo(map);
+    activePopup = popup;
+    popup.on('close', () => {
+        if (activePopup === popup) {
+            activePopup = null;
+        }
+    });
+}
+
+function setIntersectingFieldsOnMap(data) {
+    loadedIntersectingGeoJson = data && Array.isArray(data.features)
+        ? data
+        : { type: 'FeatureCollection', features: [] };
+
+    if (!map.getSource(INTERSECTIONS_SOURCE_ID)) {
+        map.addSource(INTERSECTIONS_SOURCE_ID, {
+            type: 'geojson',
+            data: loadedIntersectingGeoJson,
+            generateId: true
+        });
+        map.addLayer({
+            id: INTERSECTIONS_FILL_ID,
+            type: 'fill',
+            source: INTERSECTIONS_SOURCE_ID,
+            paint: {
+                'fill-color': '#ff6b6b',
+                'fill-opacity': 0.25
+            }
+        });
+        map.addLayer({
+            id: INTERSECTIONS_OUTLINE_ID,
+            type: 'line',
+            source: INTERSECTIONS_SOURCE_ID,
+            paint: {
+                'line-color': '#ff3b30',
+                'line-width': 3
+            }
+        });
+        map.on('click', INTERSECTIONS_FILL_ID, (e) => {
+            if (!e.features || e.features.length === 0) return;
+            const feature = e.features[0];
+            const props = feature.properties || {};
+            const history = normalizeHistory(props.history);
+            const statusBox = document.getElementById('status-bar');
+            statusBox.innerText = 'Открыто пересекающееся поле.';
+            openFieldPopup(e.lngLat, props, history, canOpenAgronomistPage && isFieldActive(props), null);
+        });
+    } else {
+        map.getSource(INTERSECTIONS_SOURCE_ID).setData(loadedIntersectingGeoJson);
+    }
+}
+
+function clearIntersectingFields() {
+    setIntersectingFieldsOnMap({ type: 'FeatureCollection', features: [] });
+}
+
 // Клик по полигону: выделение, popup с краткой инфой и историей посевов.
 map.on('click', 'fields-fill', (e) => {
     if (e.features.length > 0) {
         const feature = e.features[0];
         const props = feature.properties;
         const history = normalizeHistory(props.history);
+        clearIntersectingFields();
 
         if (selectedMaplibreId !== null) {
             map.setFeatureState({ source: 'fields-source', id: selectedMaplibreId }, { selected: false });
@@ -264,11 +341,7 @@ map.on('click', 'fields-fill', (e) => {
         const statusBox = document.getElementById('status-bar');
         statusBox.innerText = 'Поле выбрано — детали открыты во всплывающем окне.';
 
-        new maplibregl.Popup({ closeButton: true, className: 'custom-popup' })
-            .setLngLat(e.lngLat)
-            .setMaxWidth('420px')
-            .setHTML(fieldPopupHtml(props, history, canOpenAgronomistPage))
-            .addTo(map);
+        openFieldPopup(e.lngLat, props, history, canOpenAgronomistPage && isFieldActive(props), null);
     }
 });
 
@@ -346,6 +419,60 @@ function addNdviToMap(url, label) {
     document.getElementById('status-bar').innerText = label + " загружен";
 }
 
+async function loadIntersectingFields(fieldId) {
+    const response = await fetch(apiPath(`/api/fields/${encodeURIComponent(String(fieldId))}/intersections`), fetchOpts);
+    if (!response.ok) {
+        throw new Error(response.status === 404 ? 'Поле не найдено в организации.' : `Ошибка ${response.status}`);
+    }
+    return response.json();
+}
+
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act="load-intersections"]');
+    if (!btn) {
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+
+    const fieldId = btn.getAttribute('data-field-id');
+    const context = popupFieldCache.get(String(fieldId));
+    if (!fieldId || !context) {
+        return;
+    }
+
+    const statusBox = document.getElementById('status-bar');
+    btn.disabled = true;
+    btn.textContent = 'Загрузка...';
+    try {
+        const data = await loadIntersectingFields(fieldId);
+        const features = Array.isArray(data.features) ? data.features : [];
+        setIntersectingFieldsOnMap(data);
+        popupFieldCache.set(String(fieldId), {
+            props: context.props,
+            history: context.history,
+            isAgronomist: context.isAgronomist,
+            intersectingFeatures: features
+        });
+        if (activePopup) {
+            activePopup.setHTML(fieldPopupHtml(
+                context.props,
+                context.history,
+                context.isAgronomist,
+                features
+            ));
+        }
+        statusBox.innerText = features.length > 0
+            ? `Загружено пересекающихся полей: ${features.length}.`
+            : 'Пересекающихся полей не найдено.';
+    } catch (err) {
+        statusBox.innerText = err && err.message ? err.message : 'Не удалось загрузить пересекающиеся поля.';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Показать истории пересекающихся полей';
+    }
+});
+
 document.getElementById('btn-update').addEventListener('click', updateNDVI);
 document.getElementById('btn-update-all').addEventListener('click', updateAllNDVI);
 
@@ -380,6 +507,11 @@ function normalizeHistory(rawHistory) {
     }
 }
 
+function isFieldActive(props) {
+    if (!props) return true;
+    return props.active !== false && props.active !== 'false';
+}
+
 /** Экранирование перед вставкой в innerHTML, чтобы свойства поля не ломали разметку и XSS. */
 function escapeHtml(value) {
     if (value === null || value === undefined) return '';
@@ -395,11 +527,13 @@ function fieldSummaryHtml(props, historyCount) {
     const name = escapeHtml(props.name || 'Без имени');
     const id = escapeHtml(props.id);
     const area = escapeHtml(formatNumber(props.area));
+    const status = isFieldActive(props) ? 'активное' : 'устаревшее';
     return `
         <div style="line-height: 1.55; font-size: 13px;">
             <strong style="font-size: 14px; display: block; margin-bottom: 4px;">${name}</strong>
             <span><strong>ID:</strong> ${id}</span><br>
             <span><strong>Площадь:</strong> ${area} га</span><br>
+            <span><strong>Статус:</strong> ${status}</span><br>
             <span><strong>Записей истории:</strong> ${historyCount}</span>
         </div>
     `;
@@ -431,10 +565,63 @@ function fieldHistoryItemsHtml(history) {
     }).join('');
 }
 
+function intersectingFieldsSectionHtml(features) {
+    if (!Array.isArray(features)) {
+        return '';
+    }
+    if (features.length === 0) {
+        return `
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.15);">
+                <div style="font-size: 12px; margin-bottom: 6px;"><strong>Пересекающиеся поля</strong></div>
+                <div style="font-size: 12px; opacity: 0.8;">Пересечений не найдено.</div>
+            </div>
+        `;
+    }
+    const body = features.map((feature) => {
+        const props = feature.properties || {};
+        const history = normalizeHistory(props.history);
+        const title = escapeHtml(props.name || ('Поле #' + String(props.id || '—')));
+        const status = isFieldActive(props) ? 'активное' : 'устаревшее';
+        return `
+            <div style="padding: 8px 0; border-bottom: 1px solid rgba(0,0,0,0.12);">
+                <div style="font-size: 12px; line-height: 1.45; margin-bottom: 6px;">
+                    <strong>${title}</strong><br>
+                    ID: ${escapeHtml(props.id)} · Статус: ${escapeHtml(status)} · Площадь: ${escapeHtml(formatNumber(props.area))} га
+                </div>
+                <div style="font-size: 12px;">
+                    ${fieldHistoryItemsHtml(history)}
+                </div>
+            </div>
+        `;
+    }).join('');
+    return `
+        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.15);">
+            <div style="font-size: 12px; margin-bottom: 6px;"><strong>Пересекающиеся поля</strong></div>
+            <div style="max-height: 260px; overflow-y: auto; padding-right: 4px; font-size: 12px;">
+                ${body}
+            </div>
+            <div style="margin-top: 8px; font-size: 11px; opacity: 0.8;">
+                Контуры пересекающихся полей подсвечены на карте. На них тоже можно нажать.
+            </div>
+        </div>
+    `;
+}
+
 /** Сборка HTML целого popup из сводки и истории. */
-function fieldPopupHtml(props, history, isAgronomist) {
+function fieldPopupHtml(props, history, isAgronomist, intersectingFeatures) {
     const summary = fieldSummaryHtml(props, history.length);
     const items = fieldHistoryItemsHtml(history);
+    const fieldId = escapeHtml(props.id);
+    const intersectionsButton = `
+        <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.15); font-size: 13px;">
+            <button type="button"
+                    data-act="load-intersections"
+                    data-field-id="${fieldId}"
+                    style="display: inline-block; border: 1px solid #2d6cdf; background: #2d6cdf; color: #fff; border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px;">
+                Показать истории пересекающихся полей
+            </button>
+        </div>
+    `;
     const editHistoryUrl = isAgronomist
         ? escapeHtml(apiPath("/org/agronomist") + "?fieldId=" + encodeURIComponent(String(props.id)))
         : "";
@@ -443,6 +630,7 @@ function fieldPopupHtml(props, history, isAgronomist) {
                 <a href="${editHistoryUrl}" style="font-weight: 600;">Редактировать историю посевов этого поля</a>
             </div>`
         : "";
+    const intersectionsBlock = intersectingFieldsSectionHtml(intersectingFeatures);
     return `
         <div style="padding: 8px 10px; color: #333; width: 380px; max-width: 100%;">
             <div style="margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid rgba(0,0,0,0.15);">
@@ -452,6 +640,8 @@ function fieldPopupHtml(props, history, isAgronomist) {
             <div style="max-height: 300px; overflow-y: auto; padding-right: 4px; font-size: 12px;">
                 ${items}
             </div>
+            ${intersectionsButton}
+            ${intersectionsBlock}
             ${agronomistBlock}
         </div>
     `;

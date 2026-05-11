@@ -16,13 +16,34 @@
 
 <div class="card">
     <h2>Выбор поля</h2>
-    <p style="font-size: 14px; color: #444;">В списке только поля, по которым уже есть записи в истории посевов. Загрузите историю и при необходимости добавьте год.</p>
+    <p style="font-size: 14px; color: #444;">В списке только активные поля, по которым уже есть записи в истории посевов. Устаревшие поля скрываются из выдачи, но история по ним в БД сохраняется.</p>
     <div class="row">
         <label for="field-select" style="margin-right: 8px;">Поле:</label>
         <select id="field-select" style="min-width: 220px;">
             <option value="">— выберите поле —</option>
         </select>
         <button type="button" class="primary" id="btn-load-history">Показать историю</button>
+    </div>
+    <div id="field-actions" style="display: none; margin-top: 12px;">
+        <p style="margin: 0 0 8px 0;">Выбрано поле: <strong id="selected-field-name">—</strong></p>
+        <div class="row">
+            <button type="button" class="danger" id="btn-mark-obsolete">Пометить поле как устаревшее</button>
+        </div>
+        <p style="font-size: 13px; color: #666; margin-top: 8px;">
+            После перевода в статус «устаревшее» поле исчезнет из списков и карты, но его история останется в базе.
+        </p>
+    </div>
+</div>
+
+<div class="card">
+    <h2>Устаревшие поля</h2>
+    <p style="font-size: 14px; color: #444;">Здесь можно посмотреть скрытые поля и вернуть их обратно в активные.</p>
+    <div class="row">
+        <label for="obsolete-field-select" style="margin-right: 8px;">Устаревшее поле:</label>
+        <select id="obsolete-field-select" style="min-width: 220px;">
+            <option value="">— выберите поле —</option>
+        </select>
+        <button type="button" class="primary" id="btn-restore-field">Вернуть в активные</button>
     </div>
 </div>
 

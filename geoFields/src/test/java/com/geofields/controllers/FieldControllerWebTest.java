@@ -46,7 +46,7 @@ class FieldControllerWebTest {
                         new FieldFeatureDto(
                                 "Feature",
                                 1L,
-                                new FieldFeaturePropertiesDto(1L, "Field A", new BigDecimal("11.20"), Collections.emptyList()),
+                                new FieldFeaturePropertiesDto(1L, "Field A", new BigDecimal("11.20"), true, Collections.emptyList()),
                                 geometry
                         )
                 )

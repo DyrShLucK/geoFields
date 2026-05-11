@@ -10,6 +10,7 @@ public record AgronomistSummaryResponse(
         String currentLogin,
         String currentUserFullName,
         List<FieldOptionItem> fields,
+        List<FieldOptionItem> obsoleteFields,
         List<CropOptionItem> crops,
         CsrfInfo csrf
 ) {

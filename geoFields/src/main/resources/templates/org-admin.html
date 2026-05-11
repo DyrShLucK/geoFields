@@ -47,6 +47,23 @@
     <div id="members-wrap"></div>
 </div>
 
+<div class="card">
+    <h2>Поля организации</h2>
+    <p class="muted">Удалить поле может только администратор. В списке показываются только активные поля, которые видны в основных выдачах.</p>
+    <div class="row" style="align-items: flex-end;">
+        <div>
+            <label for="field-select">Поле</label><br>
+            <select id="field-select" style="min-width: 280px;">
+                <option value="">— выберите поле —</option>
+            </select>
+        </div>
+        <div>
+            <button type="button" class="danger" id="btn-delete-field">Удалить поле</button>
+        </div>
+    </div>
+    <div id="fields-wrap" class="muted" style="margin-top: 10px;"></div>
+</div>
+
 <script th:src="@{/js/csrf.js}"></script>
 <script th:src="@{/js/org-admin.js}"></script>
 </body>

@@ -10,7 +10,7 @@ info:
 
     Главная `/` отдаёт HTML без данных пользователя; контекст сессии — `GET /api/session/context`.
 
-    HTML-страницы (`/`, `/login`, `/register`, `/org/manager`, `/org/admin`) как разметка в спецификации не описаны.
+    HTML-страницы (`/`, `/login`, `/register`, `/org/manager`, `/org/admin`, `/org/agronomist`) как разметка в спецификации не описаны.
   version: 1.4.2
 
 servers:
@@ -70,6 +70,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  /api/fields/{fieldId}/intersections:
+    get:
+      tags: [Fields]
+      summary: Пересекающиеся поля для выбранного поля
+      description: Возвращает GeoJSON пересекающихся полей текущей организации вместе с их историями, включая устаревшие поля.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: GeoJSON FeatureCollection пересекающихся полей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldFeatureCollection"
+        "401":
+          description: Не авторизован
+        "404":
+          description: Поле не принадлежит организации пользователя
 
   /get_ndvi_by_id:
     get:
@@ -336,6 +362,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/ActionResult"
 
+  /api/org/admin/fields/{fieldId}:
+    delete:
+      tags: [OrgAdmin]
+      summary: Удалить поле организации
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+        "404":
+          description: Поле не найдено в организации
+
   /api/org/agronomist/summary:
     get:
       tags: [OrgAgronomist]
@@ -402,6 +450,37 @@ paths:
         "404":
           description: Поле не найдено в организации
 
+  /api/org/agronomist/fields/{fieldId}/status:
+    put:
+      tags: [OrgAgronomist]
+      summary: Изменить статус поля
+      description: AGRONOMIST может перевести поле в ACTIVE или OBSOLETE. Устаревшие поля скрываются из основных списков и GeoJSON-выдачи.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldStatusUpdateRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Некорректный статус
+        "404":
+          description: Поле не найдено в организации
+
   /api/org/agronomist/history/{historyId}:
     put:
       tags: [OrgAgronomist]
@@ -448,14 +527,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Нельзя удалить последнюю запись истории поля
         "404":
           description: Запись не найдена
 
   /api/org/agronomist/fields/intake:
     post:
       tags: [OrgAgronomist]
-      summary: Принять контур нового поля и первую запись истории (заглушка)
-      description: Пока что endpoint только принимает и валидирует payload, без сохранения в БД.
+      summary: Создать новое поле и первую запись истории
+      description: Создаёт поле, добавляет первую запись истории и, если контур пересекается с другими полями организации, записывает пары в таблицу `field_intersections`.
       security:
         - sessionCookie: []
       requestBody:
@@ -470,6 +551,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Некорректная геометрия или неизвестная культура
 
 components:
   securitySchemes:
@@ -509,7 +592,7 @@ components:
 
     FieldProperties:
       type: object
-      required: [id, name, area, history]
+      required: [id, name, area, active, history]
       properties:
         id:
           type: integer
@@ -519,6 +602,9 @@ components:
         area:
           type: number
           format: double
+        active:
+          type: boolean
+          description: TRUE - активное поле, FALSE - устаревшее поле
         history:
           type: array
           items:
@@ -841,6 +927,15 @@ components:
           type: integer
           format: int64
 
+    FieldStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: ACTIVE | OBSOLETE
+          enum: [ACTIVE, OBSOLETE]
+
     FieldCropUpsertRequest:
       type: object
       required: [cropId, cropYear]
@@ -943,6 +1038,10 @@ components:
         currentUserFullName:
           type: string
         fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldOptionItem"
+        obsoleteFields:
           type: array
           items:
             $ref: "#/components/schemas/FieldOptionItem"
