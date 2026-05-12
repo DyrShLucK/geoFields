@@ -17,14 +17,6 @@ docker compose up -d
 - `SPRING_PROFILES_ACTIVE: ""` - `html`, `css` и `js` берутся только из `app.jar`.
 - Если менялся Java-код, как и раньше нужно сначала выполнить `./gradlew clean bootJar`, потому что приложение запускается из `jar`.
 
-Полезные команды:
-
-```bash
-docker compose ps
-docker compose logs db --tail=200
-docker compose logs app --tail=200
-```
-
 ## Локальный запуск через Gradle
 
 Требования:
