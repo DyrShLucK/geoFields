@@ -1,21 +1,12 @@
 # geoFields: быстрый запуск
 
 ## Запуск через Docker
-Если есть изменения в коде
-
-Из корня проекта:
-
-```bash
-cd "/geoFields"
-./gradlew clean bootJar
-cd "../"
-```
-Если нет изменений
 
 ```
 docker compose down -v
 docker compose up -d
 ```
+
 
 Примечания:
 - `docker compose down -v` удаляет volume БД и при следующем старте заново импортирует бэкап.
@@ -25,14 +16,6 @@ docker compose up -d
 - `SPRING_PROFILES_ACTIVE: live-ui` - `html`, `css` и `js` берутся из `geoFields/src/main/resources/templates` и `geoFields/src/main/resources/static`, изменения применяются после `docker compose restart app`.
 - `SPRING_PROFILES_ACTIVE: ""` - `html`, `css` и `js` берутся только из `app.jar`.
 - Если менялся Java-код, как и раньше нужно сначала выполнить `./gradlew clean bootJar`, потому что приложение запускается из `jar`.
-
-Полезные команды:
-
-```bash
-docker compose ps
-docker compose logs db --tail=200
-docker compose logs app --tail=200
-```
 
 ## Локальный запуск через Gradle
 
@@ -75,6 +58,7 @@ cd "./geoFields"
 - `/api/org/manager/*` - сводка менеджера организации, обработка заявок на регистрацию и управление инвайт-ссылками.
 - `/api/org/admin/*` - просмотр участников организации, смена ролей, удаление пользователей и удаление полей.
 - `/api/org/agronomist/*` - сводка агронома, CRUD по истории культур, создание нового поля и смена статуса поля (`ACTIVE` / `OBSOLETE`).
+- `/api/org/agronomist/fields/intake` - реализована в виде API, html примера нет (добавление нового поля).
 
 Для большинства JSON-эндпоинтов нужна авторизованная сессия (`JSESSIONID`), а для изменяющих запросов дополнительно нужен CSRF-токен (`X-XSRF-TOKEN`). Полные схемы запросов и ответов описаны в `OpenAPIspec.yaml`.
 
@@ -83,6 +67,7 @@ cd "./geoFields"
 - HTML-шаблоны: `geoFields/src/main/resources/templates/`
 - CSS: `geoFields/src/main/resources/static/css/`
 - JavaScript: `geoFields/src/main/resources/static/js/`
+- Можно менять эти файлы, и перезапускать контейнер приложения, тогда изменения применятся ```docker compose restart app```
 
 ## Для запросов через postman или api
 
