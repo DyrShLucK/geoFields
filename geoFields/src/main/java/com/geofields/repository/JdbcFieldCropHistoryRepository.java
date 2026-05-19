@@ -18,6 +18,7 @@ import java.util.Optional;
 @Repository
 public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepository {
 
+    /** Шаблон списка полей организации; %s — условие по is_active (активные / устаревшие). */
     private static final String LIST_FIELDS_BASE = """
             SELECT DISTINCT f.id,
                    COALESCE(NULLIF(TRIM(f.field_name), ''), 'Поле #' || f.id::text) AS field_name
@@ -27,16 +28,20 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             ORDER BY f.id
             """;
 
+    /** Активные поля организации для выбора в кабинете агронома. */
     private static final String LIST_FIELDS = String.format(LIST_FIELDS_BASE, "COALESCE(f.is_active, TRUE)");
 
+    /** Неактивные (устаревшие) поля организации. */
     private static final String LIST_OBSOLETE_FIELDS = String.format(LIST_FIELDS_BASE, "NOT COALESCE(f.is_active, TRUE)");
 
+    /** Справочник всех культур. */
     private static final String LIST_CROPS = """
             SELECT c.crop_id, c.crop_name
             FROM crops c
             ORDER BY c.crop_name
             """;
 
+    /** История посевов одного поля в рамках организации. */
     private static final String LIST_HISTORY = """
             SELECT fc.history_id,
                    fc.crop_id,
@@ -58,6 +63,7 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             ORDER BY fc.crop_year NULLS LAST, fc.history_id
             """;
 
+    /** Проверяет, что запись истории посева принадлежит организации. */
     private static final String BELONGS = """
             SELECT EXISTS (
                 SELECT 1 FROM field_crops fc
@@ -65,12 +71,14 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             )
             """;
 
+    /** Количество записей истории посевов у поля. */
     private static final String COUNT_HISTORY_BY_FIELD_SQL = """
             SELECT COUNT(*)
             FROM field_crops fc
             WHERE fc.field_id = ? AND fc.organization_id = ?
             """;
 
+    /** Возвращает id поля по id записи истории посева. */
     private static final String FIND_FIELD_ID_BY_HISTORY_SQL = """
             SELECT fc.field_id
             FROM field_crops fc
@@ -78,10 +86,12 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             LIMIT 1
             """;
 
+    /** Проверяет наличие культуры в справочнике crops. */
     private static final String CROP_EXISTS = """
             SELECT crop_id FROM crops WHERE crop_id = ? LIMIT 1
             """;
 
+    /** Добавляет запись истории посева (севооборот) для поля. */
     private static final String INSERT_HISTORY = """
             INSERT INTO field_crops (
                 crop_id, field_id, organization_id,
@@ -92,6 +102,7 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """;
 
+    /** Обновляет запись истории посева по history_id и organization_id. */
     private static final String UPDATE_HISTORY = """
             UPDATE field_crops fc SET
                 crop_id = ?,
@@ -109,6 +120,7 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
             WHERE fc.history_id = ? AND fc.organization_id = ?
             """;
 
+    /** Удаляет запись истории посева. */
     private static final String DELETE_HISTORY = """
             DELETE FROM field_crops fc WHERE fc.history_id = ? AND fc.organization_id = ?
             """;
