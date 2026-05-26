@@ -3,34 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:text="${status != null ? (status + ' — ошибка') : 'Ошибка'}">Ошибка</title>
+    <title th:text="${status != null ? ('Ошибка ' + status) : 'Системная ошибка'}">Системный сбой</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/app-pages.css}">
 </head>
 <body class="geo-page-error">
-<div class="wrap">
-    <h1>
-        <span th:if="${status != null}" th:text="${status}">500</span>
-        <span th:if="${status == null}">Ошибка</span>
-    </h1>
-    <p class="lead" th:if="${error != null}" th:text="${error}">Internal Server Error</p>
-    <p class="hint" th:if="${message != null and !#strings.isEmpty(message)}" th:text="${message}">Подробности</p>
-    <p class="muted" th:if="${path != null}">
-        Запрос: <code th:text="${path}">/path</code>
-    </p>
-    <p class="muted" th:if="${timestamp != null}">
-        <span th:text="${timestamp}">—</span>
-    </p>
+    <div class="wrap error-box">
+        <h1>
+            <span class="error-code" th:if="${status != null}" th:text="${status}">500</span>
+            <span th:if="${status == null}">Сбой</span>
+        </h1>
+        <p class="lead" th:if="${error != null}" th:text="${error}">Внутренняя ошибка выполнения запроса</p>
+        <p class="hint" th:if="${message != null and !#strings.isEmpty(message)}" th:text="${message}">Описание ошибки бэкенда.</p>
+        
+        <div class="muted-box" th:if="${path != null || timestamp != null}">
+            <p th:if="${path != null}">Ресурс: <code th:text="${path}">/api/resource</code></p>
+            <p th:if="${timestamp != null}">Время инцидента: <span th:text="${timestamp}">—</span></p>
+        </div>
 
-    <div class="actions">
-        <a th:href="@{/}" class="btn-link">На главную</a>
-        <a th:href="@{/login}" class="btn-link secondary">Вход</a>
+        <div class="actions">
+            <a th:href="@{/}" class="btn-link">На главную страницу</a>
+            <a th:href="@{/login}" class="btn-link secondary">Авторизоваться снова</a>
+        </div>
+
+        <details th:if="${trace != null and !#strings.isEmpty(trace)}" class="trace mt-4">
+            <summary>Подробный стек-трейс ошибки (для разработчиков)</summary>
+            <pre th:text="${trace}"></pre>
+        </details>
     </div>
-
-    <!-- Только при включённом server.error.include-stacktrace -->
-    <details th:if="${trace != null and !#strings.isEmpty(trace)}" class="trace">
-        <summary>Технические подробности</summary>
-        <pre th:text="${trace}"></pre>
-    </details>
-</div>
 </body>
 </html>

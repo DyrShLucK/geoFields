@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${status != null ? (status + ' — ошибка') : 'Ошибка'}">Ошибка</title>
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+</head>
+<body class="geo-page-error">
+<div class="wrap">
+    <h1>
+        <span th:if="${status != null}" th:text="${status}">500</span>
+        <span th:if="${status == null}">Ошибка</span>
+    </h1>
+    <p class="lead" th:if="${error != null}" th:text="${error}">Internal Server Error</p>
+    <p class="hint" th:if="${message != null and !#strings.isEmpty(message)}" th:text="${message}">Подробности</p>
+    <p class="muted" th:if="${path != null}">
+        Запрос: <code th:text="${path}">/path</code>
+    </p>
+    <p class="muted" th:if="${timestamp != null}">
+        <span th:text="${timestamp}">—</span>
+    </p>
+
+    <div class="actions">
+        <a th:href="@{/}" class="btn-link">На главную</a>
+        <a th:href="@{/login}" class="btn-link secondary">Вход</a>
+    </div>
+
+    <!-- Только при включённом server.error.include-stacktrace -->
+    <details th:if="${trace != null and !#strings.isEmpty(trace)}" class="trace">
+        <summary>Технические подробности</summary>
+        <pre th:text="${trace}"></pre>
+    </details>
+</div>
+</body>
+</html>

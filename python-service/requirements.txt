@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+earthengine-api
+rasterio
+numpy
+requests
+rio-tiler
+sqlalchemy
+psycopg2-binary
+Pillow
+matplotlib
+geoalchemy2

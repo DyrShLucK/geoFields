@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Менеджер организации</title>
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+</head>
+<body class="geo-page-org">
+<div class="card">
+    <h1>Менеджер организации</h1>
+    <p>Организация: <strong id="org-name">…</strong> · <span id="user-label">…</span></p>
+    <p><a th:href="@{/}">На карту</a></p>
+    <div id="banner"></div>
+</div>
+
+<div class="card">
+    <h2>Заявки на регистрацию</h2>
+    <div id="pending-wrap"></div>
+</div>
+
+<div class="card">
+    <h2>Одноразовые приглашения</h2>
+    <p style="font-size: 14px; color: #444;">После регистрации по ссылке токен сгорает. Можно отозвать ссылку до использования.</p>
+    <div class="row">
+        <button type="button" class="primary" id="btn-new-invite">Создать новую ссылку</button>
+    </div>
+    <div id="invites-wrap"></div>
+</div>
+
+<script th:src="@{/js/csrf.js}"></script>
+<script th:src="@{/js/org-manager.js}"></script>
+</body>
+</html>

@@ -1,167 +1,1039 @@
+/* Переменные цветовой схемы OneSoil */
 :root {
-    --primary-green: #2ecc71;
-    --dark-blue: #2c3e50;
-    --light-gray: #f8f9fa;
-    --accent-blue: #3498db;
-    --glass: rgba(255, 255, 255, 0.92);
+    --bg-main: #f8fafc;
+    --panel-glass: rgba(255, 255, 255, 0.85);
+    --border-color: rgba(226, 232, 240, 0.8);
+    --text-primary: #0f172a;
+    --text-secondary: #64748b;
+    --accent-green: #10b981;
+    --accent-green-hover: #059669;
+    --accent-soft-green: #ecfdf5;
+    --danger-red: #ef4444;
+    --shadow-premium: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    --font-stack: 'Inter', system-ui, sans-serif;
+}
+
+* {
+    box-sizing: border-box;
 }
 
 body, html {
     margin: 0;
     padding: 0;
-    height: 100%;
-    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    overflow: hidden;
-}
-
-#map {
     width: 100%;
-    height: 100vh;
+    height: 100%;
+    overflow: hidden;
+    font-family: var(--font-stack);
+    background: var(--bg-main);
+    color: var(--text-primary);
 }
 
-
-.side-panel, .layer-control {
-    position: absolute;
-    background: var(--glass);
-    backdrop-filter: blur(8px);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    z-index: 10;
+/* Вспомогательные классы для исключения inline-стилей и экранирования % */
+.m-0-full {
+    margin: 0 !important;
 }
 
-
-.side-panel {
-    top: 20px;
-    left: 20px;
-    width: 300px;
-    padding: 20px;
-    border-radius: 16px;
+.w-100-pct {
+    width: 100% !important;
 }
 
-.brand h2 {
-    margin: 0 0 20px 0;
-    color: var(--dark-blue);
-    font-size: 22px;
+.padding-left-16 {
+    padding-left: 16px !important;
 }
 
-.brand span {
-    font-size: 12px;
-    color: var(--primary-green);
-    font-weight: bold;
-    text-transform: uppercase;
+.display-inline-mt4 {
+    display: inline-block !important;
+    margin-top: 4px !important;
 }
 
-.control-section {
-    margin: 0 20px 20px 0px;
+.flex-row-gap-8 {
+    display: flex !important;
+    gap: 8px !important;
 }
 
-.control-section label {
+.hide-file-input {
+    display: none !important;
+}
+
+.dropzone-icon {
+    font-size: 32px;
     display: block;
-    font-size: 13px;
-    color: #666;
     margin-bottom: 8px;
 }
 
-input[type="date"] {
-    width: 100%;
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 14px;
-    outline: none;
+.chart-svg-visible {
+    overflow: visible !important;
 }
 
-.button-group {
+/* Скрытое состояние вкладки погоды */
+.tab-content-hidden {
+    display: none !important;
+}
+
+/* Верхняя навигационная панель (Glassmorphism) */
+.topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 72px;
+    background: var(--panel-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    z-index: 3000;
+}
+
+.topbar-left, .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.brand-logo {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--accent-green), var(--accent-green-hover));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 18px;
+}
+
+.brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+}
+
+.brand-subtitle {
+    font-size: 11px;
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------
+   СИНХРОНИЗАЦИЯ И ПУЛЬСИРУЮЩАЯ ТОЧКА (Пульсация ВСЕГДА)
+--------------------------------------------------------- */
+.sync-status {
+    font-size: 13px;
+    font-weight: 500;
+    color: #059669;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.3s ease;
+    cursor: default;
+}
+
+.sync-status.err {
+    color: var(--danger-red);
+    cursor: pointer;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #10b981;
+    display: inline-block;
+    transition: all 0.2s ease;
+}
+
+.sync-status.err .status-dot {
+    background-color: var(--danger-red);
+}
+
+@keyframes pulse-dot {
+    0% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    }
+    100% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+@keyframes pulse-dot-err {
+    0% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+    }
+    100% {
+        transform: scale(0.9);
+        box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    }
+}
+
+/* Пульсация запущена всегда */
+.sync-status .status-dot {
+    animation: pulse-dot 1.8s infinite ease-in-out;
+}
+
+.sync-status.err .status-dot {
+    animation: pulse-dot-err 1.8s infinite ease-in-out;
+}
+
+/* ---------------------------------------------------------
+   ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ И ВЫПАДАЮЩЕЕ МЕНЮ (UX)
+--------------------------------------------------------- */
+.profile-container {
+    position: relative;
+    display: inline-block;
+}
+
+.profile-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    border-radius: 12px;
+    padding: 6px 14px;
+    box-shadow: var(--shadow-premium);
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    user-select: none;
+    transition: border-color 0.2s ease;
+}
+
+.profile-container:hover .profile-card {
+    border-color: var(--accent-green);
+}
+
+.profile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--accent-soft-green);
+    color: var(--accent-green-hover);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.profile-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.profile-role {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.profile-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: var(--shadow-premium);
+    border: 1px solid var(--border-color);
+    width: 180px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 3100;
+    padding: 6px;
+}
+
+.profile-container:hover .profile-dropdown {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+}
+
+.dropdown-item:hover {
+    background: #f1f5f9;
+    color: var(--danger-red);
+}
+
+.dropdown-icon {
+    font-size: 14px;
+}
+
+/* Стилизация интерактивной карты (Строгая блокировка перекрытий) */
+#map {
+    position: absolute;
+    top: 72px;
+    left: 0;
+    width: 100%;
+    height: calc(100vh - 72px);
+    z-index: 1;
+    pointer-events: auto !important; /* Форсируем улавливание мыши картой */
+}
+
+/* Модульные панели управления */
+.icon-btn, .floating-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-premium);
+    border: 1px solid var(--border-color);
+}
+
+.icon-btn:hover, .floating-btn:hover {
+    transform: translateY(-2px);
+    border-color: var(--accent-green);
+    color: var(--accent-green-hover);
+}
+
+.map-controls-left {
+    position: fixed;
+    left: 20px;
+    top: 92px;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    z-index: 1000;
 }
 
-.btn {
-    padding: 12px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.2s;
-    font-size: 14px;
-}
-
-.btn.primary {
-    background: var(--primary-green);
-    color: white;
-}
-
-.btn.primary:hover { background: #27ae60; transform: translateY(-1px); }
-
-.btn.secondary {
-    background: var(--accent-blue);
-    color: white;
-}
-
-.btn.secondary:hover { background: #2980b9; transform: translateY(-1px); }
-
-.status-box {
-    margin-top: 20px;
-    padding: 12px;
-    background: #f1f3f5;
-    border-radius: 8px;
-    font-size: 13px;
-    color: #495057;
-    border-left: 4px solid var(--accent-blue);
-}
-
-.legend {
-    margin-top: 25px;
-}
-
-.legend-title { font-size: 12px; font-weight: bold; margin-bottom: 8px; }
-
-.legend-bar {
-    height: 12px;
-    width: 100%;
-    background: linear-gradient(to right, #d73027, #f4a582, #ffffbf, #a6d96a, #1a9850);
-    border-radius: 4px;
-}
-
-.legend-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    margin-top: 4px;
-    color: #888;
-}
-
-.layer-control {
-    top: 20px;
+.map-controls-right {
+    position: fixed;
     right: 20px;
-    width: 190px;
-    padding: 15px;
-    border-radius: 12px;
+    top: 92px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 1000;
 }
 
-.layer-control h4 {
-    margin: 0 0 12px 0;
-    font-size: 14px;
-    color: var(--dark-blue);
-    border-bottom: 1px solid #eee;
-    padding-bottom: 5px;
+/* Боковое меню (Добавлено visibility и pointer-events для исключения невидимых блокировок) */
+.sidebar {
+    position: fixed;
+    top: 72px;
+    left: 0;
+    width: 280px;
+    height: calc(100vh - 72px);
+    background: var(--panel-glass);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid var(--border-color);
+    z-index: 2500;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;         /* Скрываем для кликов в закрытом виде */
+    pointer-events: none;       /* Полностью игнорируем мышь в закрытом виде */
 }
 
-.radio-item, .check-item {
+.sidebar.open {
+    transform: translateX(0);
+    visibility: visible;        /* Показываем кликабельный элемент */
+    pointer-events: auto;       /* Включаем события мыши */
+}
+
+.sidebar-inner {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 24px;
+}
+
+.sidebar-heading {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 16px;
+    font-weight: 700;
+}
+
+.sidebar-item {
     display: flex;
     align-items: center;
-    margin-bottom: 8px;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    margin-bottom: 6px;
+}
+
+.sidebar-item:hover {
+    background: rgba(16, 185, 129, 0.05);
+    color: var(--accent-green);
+}
+
+.sidebar-item.active {
+    background: var(--accent-soft-green);
+    color: var(--accent-green-hover);
+    font-weight: 600;
+}
+
+.logout-btn {
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
     cursor: pointer;
+}
+
+/* Панели */
+.layers-panel, .filter-panel {
+    position: fixed;
+    width: 260px;
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: var(--shadow-premium);
+    z-index: 2000;
+    border: 1px solid var(--border-color);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(10px);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.layers-panel {
+    top: 92px;
+    right: 76px;
+}
+
+.filter-panel {
+    top: 92px;
+    left: 76px;
+    width: 300px;
+}
+
+.layers-panel.open, .filter-panel.open {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.panel-title, .filter-title {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 14px;
+}
+
+.group-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-top: 16px;
+    margin-bottom: 8px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.radio-row, .check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    cursor: pointer;
+}
+
+/* Кастомизация полей ввода фильтра */
+.filter-group {
+    margin-bottom: 14px;
+}
+
+.filter-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.filter-input, .filter-select {
+    width: 100%;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid var(--border-color);
+    padding: 0 12px;
+    font-size: 13px;
+    background: var(--bg-main);
+    outline: none;
+    transition: border-color 0.2s ease;
+}
+
+.filter-input:focus, .filter-select:focus {
+    border-color: var(--accent-green);
+}
+
+.filter-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.filter-btn {
+    flex: 1;
+    height: 38px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+}
+
+.filter-btn.primary {
+    background: var(--accent-green);
+    color: white;
+}
+
+.filter-btn.secondary {
+    background: #f1f5f9;
+    color: var(--text-secondary);
+}
+
+/* ---------------------------------------------------------
+   СПИСОК ВЫБОРА ПОЛЕЙ (UX/UI МУЛЬТИСЕЛЕКТ)
+--------------------------------------------------------- */
+.filter-checkbox-list {
+    max-height: 110px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 12px;
+    background: var(--bg-main);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.filter-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.filter-checkbox-row input {
+    cursor: pointer;
+    accent-color: var(--accent-green);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+/* Компактный список полей для аналитических карточек */
+.analytics-checkbox-list {
+    max-height: 85px;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 6px 10px;
+    background: var(--bg-main);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-bottom: 12px;
+}
+
+/* Линейка - информер */
+.measure-tooltip-panel {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(15, 23, 42, 0.95);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 12px;
+    font-size: 13px;
+    z-index: 4000;
+    box-shadow: var(--shadow-premium);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    max-width: 90%;
+    text-align: center;
+}
+
+#measure-output {
+    font-weight: 700;
+    color: var(--accent-green);
+    margin-top: 6px;
+}
+
+/* ---------------------------------------------------------
+   БОКОВАЯ ПАНЕЛЬ АНАЛИТИКИ (РЕДИЗАЙН ПО МАКЕТУ)
+--------------------------------------------------------- */
+.analytics-panel {
+    position: fixed;
+    top: 72px;
+    right: 0;
+    width: 390px;
+    height: calc(100vh - 72px);
+    background: white;
+    border-left: 1px solid var(--border-color);
+    z-index: 2400;
+    overflow-y: auto;
+    padding: 24px;
+    transform: translateX(100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    visibility: hidden;         /* Скрываем для кликов в закрытом виде (Новое!) */
+    pointer-events: none;       /* Игнорируем мышь в закрытом виде (Новое!) */
+}
+
+.analytics-panel.open {
+    transform: translateX(0);
+    visibility: visible;        /* Показываем при открытии */
+    pointer-events: auto;       /* Включаем события мыши */
+}
+
+.analytics-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+}
+
+.analytics-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+/* Сетка показателей 2х2 и 3 карточки по макету */
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    border: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.stat-card.full-width {
+    grid-column: span 2;
+}
+
+.stat-left {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: baseline;
+}
+
+.stat-unit {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-left: 2px;
+    font-weight: 500;
+}
+
+.stat-right {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stat-right svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* Цвета и подложки по макету */
+.icon-green { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+.icon-blue { background: rgba(37, 99, 235, 0.1); color: #2563eb; }
+.icon-sun { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+.icon-orange { background: rgba(249, 115, 22, 0.15); color: #f97316; }
+
+.text-orange { color: #f97316 !important; }
+
+/* Стилизация вкладок таббара */
+.analytics-tabs {
+    display: flex;
+    background: #f1f5f9;
+    padding: 4px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+    gap: 4px;
+}
+
+.analytics-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+}
+
+.analytics-tab.active {
+    background: white;
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.analytics-card {
+    background: white;
+    border-radius: 16px;
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 16px;
+}
+
+.card-title-mini {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 16px;
+}
+
+/* Пончик распределения культур */
+.donut-wrap {
+    display: flex;
+    justify-content: center;
+    margin: 16px 0;
+}
+
+.donut-chart {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    position: relative;
+    background: conic-gradient(#10b981 0% 29%, #f59e0b 29% 68%, #f97316 68% 100%);
+    cursor: pointer;
+}
+
+.donut-chart::after {
+    content: "";
+    position: absolute;
+    inset: 24px;
+    background: white;
+    border-radius: 50%;
+}
+
+/* Легенда к диаграмме с распределением культур */
+.crop-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.crop-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     font-size: 13px;
 }
 
-.radio-item input, .check-item input {
-    margin-right: 10px;
+.crop-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.layer-control hr {
-    border: 0;
-    border-top: 1px solid #eee;
-    margin: 15px 0;
+.crop-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    cursor: help;
+}
+
+.crop-dot.green { background: #10b981; }
+.crop-dot.yellow { background: #f59e0b; }
+.crop-dot.orange { background: #f97316; }
+
+.crop-val {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Показатели здоровья почвы (Проценты ширины перенесены из HTML) */
+.soil-metric {
+    margin-bottom: 16px;
+}
+
+.soil-metric:last-child {
+    margin-bottom: 0;
+}
+
+.soil-top {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.soil-name {
+    color: var(--text-secondary);
+    font-weight: 500;
+}
+
+.soil-val {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.progress {
+    height: 8px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: #0f172a;
+    border-radius: 999px;
+    cursor: help;
+    transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.soil-moisture-bar {
+    width: 58%;
+}
+
+.soil-organic-bar {
+    width: 72%;
+}
+
+.soil-ph-bar {
+    width: 85%;
+}
+
+/* ---------------------------------------------------------
+   МОДАЛЬНЫЕ ОКНА И ДРОПЗОНЫ ИМПОРТА
+--------------------------------------------------------- */
+.modal-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 5000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-backdrop.open {
+    display: flex;
+}
+
+.modal-card {
+    background: white;
+    width: 100%;
+    max-width: 480px;
+    border-radius: 24px;
+    padding: 30px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    animation: modalScaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes modalScaleUp {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.modal-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 26px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.import-dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 16px;
+    padding: 32px 20px;
+    text-align: center;
+    background: #f8fafc;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.import-dropzone:hover, .import-dropzone.dragover {
+    border-color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.02);
+}
+
+.token {
+    display: inline-block;
+    background: #f1f5f9;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-family: monospace;
+    font-size: 12px;
+}
+
+/* ---------------------------------------------------------
+   ЭЛЕМЕНТЫ УПРАВЛЕНИЯ MAPLIBRE GL
+--------------------------------------------------------- */
+.maplibregl-ctrl-top-right {
+    top: 50% !important;
+    transform: translateY(-50%);
+    right: 20px !important;
+    bottom: auto !important;
+}
+
+.maplibregl-ctrl-top-right .maplibregl-ctrl-group {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+}
+
+.maplibregl-ctrl button {
+    width: 44px !important;
+    height: 44px !important;
+    border-radius: 12px !important;
+    margin: 0 !important;
+    border: 1px solid var(--border-color) !important;
+    background: white !important;
+    box-shadow: var(--shadow-premium) !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+/* ---------------------------------------------------------
+   ИНТЕРАКТИВНЫЙ ВСПЛЫВАЮЩИЙ ТУЛТИП ДЛЯ ГРАФИКОВ
+--------------------------------------------------------- */
+.chart-tooltip {
+    position: fixed;
+    display: none;
+    background: rgba(15, 23, 42, 0.95);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+/* Плавный интерактивный отклик при наведении на точки и столбики графиков */
+circle[data-tip], rect[data-tip], .progress-fill[data-tip], .crop-dot[data-tip], .donut-chart[data-tip] {
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+}
+
+circle[data-tip]:hover {
+    stroke-width: 2px !important;
+    fill: #10b981 !important;
+    transform: scale(1.25);
+    transform-origin: center;
+    transform-box: fill-box;
+}
+
+/* Тултипы и hover эффекты на столбиках погодных графиков */
+rect.temp-bar:hover {
+    fill: #d97706 !important;
+    opacity: 1 !important;
+}
+
+rect.rain-bar:hover {
+    fill: #1d4ed8 !important;
+    opacity: 1 !important;
+}
+
+.progress-fill[data-tip]:hover {
+    background: #10b981 !important;
 }

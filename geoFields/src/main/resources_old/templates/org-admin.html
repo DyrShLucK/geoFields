@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Администрирование организации</title>
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+    <style>
+        body.geo-page-org.geo-page-org--admin {
+            max-width: 900px;
+        }
+        body.geo-page-org--admin th {
+            background: #eef1f6;
+        }
+        body.geo-page-org--admin td {
+            vertical-align: top;
+        }
+        body.geo-page-org--admin select {
+            max-width: 100%;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid #ccd3df;
+            font-size: 13px;
+        }
+        body.geo-page-org--admin button.primary {
+            background: #2f80ed;
+            color: #fff;
+            border-color: #2563c7;
+        }
+        body.geo-page-org--admin .muted {
+            color: #555;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body class="geo-page-org geo-page-org--admin">
+<div class="card">
+    <h1>Администрирование организации</h1>
+    <p>Организация: <strong id="org-name">…</strong> · <span id="user-label">…</span></p>
+    <p class="muted">Список пользователей организации, смена ролей и удаление учётных записей (кроме себя). Нельзя удалить или лишить роли последнего администратора.</p>
+    <p><a th:href="@{/}">На карту</a> · <a th:href="@{/org/manager}">Заявки и приглашения</a></p>
+    <div id="banner"></div>
+</div>
+
+<div class="card">
+    <h2>Пользователи</h2>
+    <div id="members-wrap"></div>
+</div>
+
+<div class="card">
+    <h2>Поля организации</h2>
+    <p class="muted">Удалить поле может только администратор. В списке показываются только активные поля, которые видны в основных выдачах.</p>
+    <div class="row" style="align-items: flex-end;">
+        <div>
+            <label for="field-select">Поле</label><br>
+            <select id="field-select" style="min-width: 280px;">
+                <option value="">— выберите поле —</option>
+            </select>
+        </div>
+        <div>
+            <button type="button" class="danger" id="btn-delete-field">Удалить поле</button>
+        </div>
+    </div>
+    <div id="fields-wrap" class="muted" style="margin-top: 10px;"></div>
+</div>
+
+<script th:src="@{/js/csrf.js}"></script>
+<script th:src="@{/js/org-admin.js}"></script>
+</body>
+</html>

@@ -1,29 +1,26 @@
 /**
- * Админка организации: список пользователей, смена роли, удаление.
- * API: /api/org/admin/*, только для пользователей с ролью ORG_ADMIN (иначе 403).
+ * Администрирование организации: Управление пользователями и земельным фондом.
  */
 (function () {
     const API = '/api/org/admin';
     const AGRONOMIST_API = '/api/org/agronomist';
     const fetchOpts = { credentials: 'same-origin' };
 
-    /** Подписи в выпадающем списке ролей (значения должны совпадать с enum на бэкенде). */
     const ROLE_OPTIONS = [
         { value: 'USER', label: 'Пользователь' },
         { value: 'AGRONOMIST', label: 'Агроном' },
-        { value: 'ORG_MANAGER', label: 'Менеджер организации' },
-        { value: 'ORG_ADMIN', label: 'Администратор организации' },
+        { value: 'ORG_MANAGER', label: 'Менеджер' },
+        { value: 'ORG_ADMIN', label: 'Администратор' },
     ];
 
-    /** POST с JSON + CSRF (как на странице менеджера). */
     function postHeaders(csrfFromSummary) {
-        const h = csrfHeaders({ 'Content-Type': 'application/json' });
+        const headers = csrfHeaders({ 'Content-Type': 'application/json' });
         const headerName = csrfFromSummary && csrfFromSummary.headerName ? csrfFromSummary.headerName : 'X-XSRF-TOKEN';
         const token = (csrfFromSummary && csrfFromSummary.token) ? csrfFromSummary.token : readXsrfToken();
         if (token) {
-            h[headerName] = token;
+            headers[headerName] = token;
         }
-        return h;
+        return headers;
     }
 
     let lastCsrf = null;
@@ -47,40 +44,37 @@
             .replace(/"/g, '&quot;');
     }
 
-    /** HTML <select> по одному пользователю; для текущего пользователя — disabled (роль себе не меняем с UI). */
     function roleSelectHtml(currentRole, userId, disabled) {
         let opts = ROLE_OPTIONS.map(function (o) {
             const sel = o.value === currentRole ? ' selected' : '';
             return '<option value="' + escapeHtml(o.value) + '"' + sel + '>' + escapeHtml(o.label) + '</option>';
         }).join('');
-        return '<select data-user-id="' + userId + '" data-kind="role"' + (disabled ? ' disabled' : '') + '>' + opts + '</select>';
+        return '<select class="form-input" data-user-id="' + userId + '" data-kind="role"' + (disabled ? ' disabled' : '') + '>' + opts + '</select>';
     }
 
-    /** Загрузка таблицы пользователей и подписи «Вы: …». */
     async function loadSummary() {
         showBanner('', false);
         const res = await fetch(API + '/summary', fetchOpts);
         if (!res.ok) {
-            document.getElementById('members-wrap').innerHTML = '<p>Не удалось загрузить данные (' + res.status + ').</p>';
+            document.getElementById('members-wrap').innerHTML = '<p class="muted">Не удалось загрузить данные участников.</p>';
             return;
         }
         const data = await res.json();
         lastCsrf = data.csrf || null;
-        document.getElementById('org-name').textContent = (data.organizationName && String(data.organizationName).trim() !== '')
-            ? data.organizationName
-            : ('#' + String(data.organizationId));
-        var ul = document.getElementById('user-label');
+        document.getElementById('org-name').textContent = data.organizationName || ('#' + data.organizationId);
+        
+        const ul = document.getElementById('user-label');
         if (ul) {
             ul.textContent = 'Вы: ' + (data.currentUserFullName || data.currentLogin || '');
         }
 
         const mw = document.getElementById('members-wrap');
         if (!data.members || data.members.length === 0) {
-            mw.innerHTML = '<p>Нет пользователей.</p>';
+            mw.innerHTML = '<p class="muted">Пользователи отсутствуют.</p>';
         } else {
             let rows = data.members.map(function (m) {
                 const st = escapeHtml(m.registrationStatus) + (m.active ? '' : ' · неактивен');
-                const who = escapeHtml(m.lastName) + ' ' + escapeHtml(m.firstName) + ' ' + escapeHtml(m.middleName);
+                const who = escapeHtml(m.lastName) + ' ' + escapeHtml(m.firstName) + ' ' + (m.middleName ? escapeHtml(m.middleName) : '');
                 const dis = m.currentUser;
                 return '<tr data-id="' + m.id + '">' +
                     '<td>' + who.trim() + '</td>' +
@@ -88,11 +82,11 @@
                     '<td>' + escapeHtml(m.email) + '</td>' +
                     '<td>' + escapeHtml(st) + '</td>' +
                     '<td>' + roleSelectHtml(m.role, m.id, dis) + '</td>' +
-                    '<td><button type="button" class="primary" data-act="save-role" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Сохранить роль</button></td>' +
-                    '<td><button type="button" class="danger" data-act="delete" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Удалить</button></td>' +
+                    '<td><button type="button" class="btn primary" data-act="save-role" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Сохранить</button></td>' +
+                    '<td><button type="button" class="btn danger" data-act="delete" data-id="' + m.id + '"' + (dis ? ' disabled' : '') + '>Удалить</button></td>' +
                     '</tr>';
             }).join('');
-            mw.innerHTML = '<table><thead><tr><th>ФИО</th><th>Логин</th><th>Email</th><th>Статус</th><th>Роль</th><th></th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
+            mw.innerHTML = '<table><thead><tr><th>ФИО</th><th>Логин</th><th>Email</th><th>Статус</th><th>Права доступа</th><th></th><th></th></tr></thead><tbody>' + rows + '</tbody></table>';
 
             document.querySelectorAll('button[data-act="save-role"]').forEach(function (btn) {
                 btn.addEventListener('click', onSaveRole);
@@ -104,19 +98,34 @@
         await loadFields();
     }
 
-    function selectForRow(userId) {
-        return document.querySelector('select[data-user-id="' + userId + '"]');
+    async function loadFields() {
+        const res = await fetch(AGRONOMIST_API + '/summary', fetchOpts);
+        if (!res.ok) return;
+        const data = await res.json();
+        lastFields = data.fields || [];
+        
+        const sel = document.getElementById('field-select');
+        sel.innerHTML = '<option value="">— выберите поле из списка —</option>' +
+            lastFields.map(function (f) {
+                return '<option value="' + f.fieldId + '">' + escapeHtml(f.fieldName) + '</option>';
+            }).join('');
     }
 
-    function parseOptionalJson(text) {
-        try {
-            return text ? JSON.parse(text) : null;
-        } catch (_) {
-            return null;
-        }
+    function onSaveRole(ev) {
+        const btn = ev.currentTarget;
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        const sel = document.querySelector('select[data-user-id="' + id + '"]');
+        if (!sel) return;
+        apiJsonCall('POST', '/role', { userId: id, role: sel.value });
     }
 
-    /** JSON-запросы с разбором ответа: у бэкенда ошибки API могут идти как 200 + { ok: false }. */
+    function onDelete(ev) {
+        const btn = ev.currentTarget;
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        if (!confirm('Внимание: Вы действительно хотите удалить аккаунт #' + id + '? Это действие необратимо.')) return;
+        apiJsonCall('POST', '/delete', { userId: id });
+    }
+
     async function apiJsonCall(method, path, body) {
         const res = await fetch(API + path, {
             method: method,
@@ -125,76 +134,29 @@
             body: body == null ? undefined : JSON.stringify(body),
         });
         const text = await res.text();
-        const payload = parseOptionalJson(text);
-        if (!res.ok) {
-            const detail = payload && (payload.detail || payload.message);
-            showBanner('Ошибка ' + res.status + (detail ? ': ' + detail : ''), true);
-            return { ok: false, res: res, payload: payload };
-        }
-        if (payload && payload.message) {
-            showBanner(payload.message, payload.ok === false);
-        }
-        await loadSummary();
-        return { ok: true, res: res, payload: payload };
-    }
+        let payload = null;
+        try { payload = text ? JSON.parse(text) : null; } catch (_) {}
 
-    function fillFieldSelect(fields) {
-        const sel = document.getElementById('field-select');
-        const current = sel.value;
-        sel.innerHTML = '<option value="">— выберите поле —</option>' +
-            fields.map(function (f) {
-                return '<option value="' + f.fieldId + '">' + escapeHtml(f.fieldName) + '</option>';
-            }).join('');
-        if (current && fields.some(function (f) { return String(f.fieldId) === current; })) {
-            sel.value = current;
-        }
-        document.getElementById('fields-wrap').textContent = fields.length
-            ? ('Активных полей в списке: ' + fields.length)
-            : 'Активных полей не найдено.';
-    }
-
-    async function loadFields() {
-        const res = await fetch(AGRONOMIST_API + '/summary', fetchOpts);
         if (!res.ok) {
-            document.getElementById('fields-wrap').textContent = 'Не удалось загрузить список полей.';
+            showBanner('Ошибка операции: ' + (payload ? payload.message : res.status), true);
             return;
         }
-        const data = await res.json();
-        lastFields = data.fields || [];
-        fillFieldSelect(lastFields);
-    }
-
-    function onSaveRole(ev) {
-        const btn = ev.currentTarget;
-        const id = parseInt(btn.getAttribute('data-id'), 10);
-        const sel = selectForRow(id);
-        if (!sel) return;
-        apiJsonCall('POST', '/role', { userId: id, role: sel.value });
-    }
-
-    function onDelete(ev) {
-        const btn = ev.currentTarget;
-        const id = parseInt(btn.getAttribute('data-id'), 10);
-        if (!confirm('Удалить пользователя #' + id + '? Действие необратимо.')) return;
-        apiJsonCall('POST', '/delete', { userId: id });
+        showBanner('Успешно выполнено.', false);
+        await loadSummary();
     }
 
     document.getElementById('btn-delete-field').addEventListener('click', function () {
         const sel = document.getElementById('field-select');
         const fieldId = parseInt(sel.value, 10);
         if (!fieldId) {
-            showBanner('Выберите поле для удаления.', true);
+            showBanner('Ошибка: Не выбрано поле.', true);
             return;
         }
-        const field = lastFields.find(function (f) { return f.fieldId === fieldId; });
-        const fieldName = field && field.fieldName ? field.fieldName : ('#' + String(fieldId));
-        if (!confirm('Удалить поле "' + fieldName + '"? История и связанные записи тоже будут удалены.')) {
-            return;
-        }
+        if (!confirm('Внимание: Удалить выбранное поле? Все связанные севообороты и логи также сотрутся.')) return;
         apiJsonCall('DELETE', '/fields/' + fieldId, null);
     });
 
     loadSummary().catch(function () {
-        showBanner('Ошибка сети при загрузке страницы.', true);
+        showBanner('Сбой сети при получении информации.', true);
     });
 })();

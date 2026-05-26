@@ -1,20 +1,25 @@
 /**
- * Утилиты CSRF для fetch POST к Spring Security с CookieCsrfTokenRepository.
- * Сервер кладёт токен в cookie XSRF-TOKEN; в заголовке POST нужно передать X-XSRF-TOKEN.
+ * Утилиты для работы со Spring Security CSRF (с использованием CookieCsrfTokenRepository).
  */
 
-/** Достаёт значение токена из cookie (браузер сам шлёт cookie, заголовок добавляем вручную). */
+/**
+ * Получить значение токена из XSRF Cookie.
+ */
 function readXsrfToken() {
-    const m = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
-    return m ? decodeURIComponent(m[1]) : '';
+    const value = "; " + document.cookie;
+    const parts = value.split("; XSRF-TOKEN=");
+    if (parts.length === 2) return decodeURIComponent(parts.pop().split(";").shift());
+    return "";
 }
 
-/** Клонирует extra и при наличии токена добавляет заголовок для проверки CSRF на бэкенде. */
-function csrfHeaders(extra) {
-    const h = Object.assign({}, extra || {});
-    const t = readXsrfToken();
-    if (t) {
-        h['X-XSRF-TOKEN'] = t;
+/**
+ * Обогатить объект заголовков заголовком защиты CSRF.
+ */
+function csrfHeaders(extraHeaders) {
+    const headers = Object.assign({}, extraHeaders || {});
+    const token = readXsrfToken();
+    if (token) {
+        headers['X-XSRF-TOKEN'] = token;
     }
-    return h;
+    return headers;
 }

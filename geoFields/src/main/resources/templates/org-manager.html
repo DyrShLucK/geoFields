@@ -3,32 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Менеджер организации</title>
+    <title>Панель менеджера организации — GeoFields</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/app-pages.css}">
 </head>
 <body class="geo-page-org">
-<div class="card">
-    <h1>Менеджер организации</h1>
-    <p>Организация: <strong id="org-name">…</strong> · <span id="user-label">…</span></p>
-    <p><a th:href="@{/}">На карту</a></p>
-    <div id="banner"></div>
-</div>
-
-<div class="card">
-    <h2>Заявки на регистрацию</h2>
-    <div id="pending-wrap"></div>
-</div>
-
-<div class="card">
-    <h2>Одноразовые приглашения</h2>
-    <p style="font-size: 14px; color: #444;">После регистрации по ссылке токен сгорает. Можно отозвать ссылку до использования.</p>
-    <div class="row">
-        <button type="button" class="primary" id="btn-new-invite">Создать новую ссылку</button>
+    <div class="card">
+        <h1>Менеджер организации</h1>
+        <p>Организация: <strong id="org-name">Загрузка...</strong> · <span id="user-label">Загрузка...</span></p>
+        <div class="nav-links">
+            <a th:href="@{/}" class="btn-link">← Вернуться на карту</a>
+        </div>
+        <div id="banner"></div>
     </div>
-    <div id="invites-wrap"></div>
-</div>
 
-<script th:src="@{/js/csrf.js}"></script>
-<script th:src="@{/js/org-manager.js}"></script>
+    <div class="card">
+        <h2>Ожидающие заявки на регистрацию</h2>
+        <div id="pending-wrap" class="table-container">
+            <p class="muted">Список пуст или загружается...</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Управление инвайт-ссылками</h2>
+        <p class="muted font-sm">Каждая ссылка генерируется с уникальным одноразовым токеном безопасности. После завершения регистрации токен автоматически деактивируется.</p>
+        <button type="button" class="btn primary mb-3" id="btn-new-invite">+ Сгенерировать приглашение</button>
+        <div id="invites-wrap"></div>
+    </div>
+
+    <script th:src="@{/js/csrf.js}"></script>
+    <script th:src="@{/js/org-manager.js}"></script>
 </body>
 </html>

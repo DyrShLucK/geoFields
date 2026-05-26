@@ -1,0 +1,1087 @@
+openapi: 3.0.3
+info:
+  title: GeoFields HTTP API
+  description: |
+    JSON-эндпоинты бэкенда GeoFields (поля, NDVI, менеджер организации).
+
+    **Авторизация:** сессия Spring Security (форма логина). Запросы с браузера отправляйте с `credentials: include` / same-origin cookie.
+
+    **CSRF:** для `POST` используется cookie `XSRF-TOKEN` и заголовок `X-XSRF-TOKEN` (см. Spring `CookieCsrfTokenRepository`).
+
+    Главная `/` отдаёт HTML без данных пользователя; контекст сессии — `GET /api/session/context`.
+
+    HTML-страницы (`/`, `/login`, `/register`, `/org/manager`, `/org/admin`, `/org/agronomist`) как разметка в спецификации не описаны.
+  version: 1.4.2
+
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер (см. `server.port` в application.properties)
+
+tags:
+  - name: Fields
+    description: Поля и история в формате GeoJSON
+  - name: NDVI
+    description: Заглушки тайлов и значения NDVI
+  - name: OrgManager
+    description: Менеджер организации (роли ORG_MANAGER, ORG_ADMIN)
+  - name: OrgAdmin
+    description: Администрирование пользователей организации (только ORG_ADMIN)
+  - name: OrgAgronomist
+    description: Эндпоинты агронома (история культур и intake нового поля)
+  - name: Session
+    description: Сессия и контекст пользователя для SPA-частей UI
+
+paths:
+  /api/session/context:
+    get:
+      tags: [Session]
+      summary: Контекст текущего пользователя (ФИО, роль, org id, CSRF для выхода)
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Авторизованный пользователь
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionContext"
+        "401":
+          description: Нет сессии
+
+  /get_fields:
+    get:
+      tags: [Fields]
+      summary: Список полей организации текущего пользователя
+      description: GeoJSON FeatureCollection; в properties у каждого поля — история посевов.
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Успех
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldFeatureCollection"
+        "401":
+          description: Не авторизован
+        "500":
+          description: Ошибка сервера / БД
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/fields/{fieldId}/intersections:
+    get:
+      tags: [Fields]
+      summary: Пересекающиеся поля для выбранного поля
+      description: Возвращает GeoJSON пересекающихся полей текущей организации вместе с их историями, включая устаревшие поля.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: GeoJSON FeatureCollection пересекающихся полей
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FieldFeatureCollection"
+        "401":
+          description: Не авторизован
+        "404":
+          description: Поле не принадлежит организации пользователя
+
+  /get_ndvi_by_id:
+    get:
+      tags: [NDVI]
+      summary: URL растрового слоя NDVI для одного поля
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "1"
+        - name: date
+          in: query
+          required: true
+          description: Дата снимка (строка, как на фронте)
+          schema:
+            type: string
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: Объект с полем url — шаблон тайлов `{z}/{x}/{y}`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviTileUrlResponse"
+        "400":
+          description: Некорректный field_id или дата
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии или не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+
+  /get_all_ndvi_tile:
+    get:
+      tags: [NDVI]
+      summary: Один слой NDVI по всем полям организации
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "2024-06-15"
+        - name: field_ids
+          in: query
+          required: false
+          description: Id полей (повторяющийся query-параметр). Если не задан — все поля организации из БД.
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+      responses:
+        "200":
+          description: url, organizationId, date
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviOrgTileResponse"
+        "400":
+          description: Некорректная дата или field_ids
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Не авторизован
+
+  /get_ndvi_value:
+    get:
+      tags: [NDVI]
+      summary: Значение NDVI в точке (заглушка)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: lat
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+          example: 55.75
+        - name: lon
+          in: query
+          required: true
+          schema:
+            type: number
+            format: double
+          example: 37.62
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "2024-06-15"
+      responses:
+        "400":
+          description: Некорректная дата
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Не авторизован
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviValueResponse"
+
+  /api/org/manager/summary:
+    get:
+      tags: [OrgManager]
+      summary: Сводка для UI менеджера (заявки, приглашения, CSRF)
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgManagerSummary"
+        "403":
+          description: Нет роли менеджера / админа
+
+  /api/org/manager/approve:
+    post:
+      tags: [OrgManager]
+      summary: Принять заявку на регистрацию
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+        "403":
+          description: Запрещено
+
+  /api/org/manager/reject:
+    post:
+      tags: [OrgManager]
+      summary: Отклонить заявку
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/manager/invite:
+    post:
+      tags: [OrgManager]
+      summary: Создать одноразовое приглашение
+      security:
+        - sessionCookie: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+            example: {}
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InviteCreated"
+
+  /api/org/manager/revoke-invite:
+    post:
+      tags: [OrgManager]
+      summary: Отозвать приглашение по токену
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/admin/summary:
+    get:
+      tags: [OrgAdmin]
+      summary: Список пользователей организации и CSRF для UI админа
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminOrgSummary"
+        "403":
+          description: Нужна роль ORG_ADMIN
+
+  /api/org/admin/role:
+    post:
+      tags: [OrgAdmin]
+      summary: Назначить роль пользователю организации
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoleUpdateRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/admin/delete:
+    post:
+      tags: [OrgAdmin]
+      summary: Удалить пользователя из организации
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserIdRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+
+  /api/org/admin/fields/{fieldId}:
+    delete:
+      tags: [OrgAdmin]
+      summary: Удалить поле организации
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionResult"
+        "404":
+          description: Поле не найдено в организации
+
+  /api/org/agronomist/summary:
+    get:
+      tags: [OrgAgronomist]
+      summary: Сводка для UI агронома
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgronomistSummary"
+        "403":
+          description: Нужна роль AGRONOMIST или ORG_ADMIN
+
+  /api/org/agronomist/fields/{fieldId}/history:
+    get:
+      tags: [OrgAgronomist]
+      summary: История по полю
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FieldCropHistoryItem"
+        "404":
+          description: Поле не найдено в организации
+
+    post:
+      tags: [OrgAgronomist]
+      summary: Добавить запись истории по полю
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldCropUpsertRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "404":
+          description: Поле не найдено в организации
+
+  /api/org/agronomist/fields/{fieldId}/status:
+    put:
+      tags: [OrgAgronomist]
+      summary: Изменить статус поля
+      description: AGRONOMIST может перевести поле в ACTIVE или OBSOLETE. Устаревшие поля скрываются из основных списков и GeoJSON-выдачи.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: fieldId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldStatusUpdateRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Некорректный статус
+        "404":
+          description: Поле не найдено в организации
+
+  /api/org/agronomist/history/{historyId}:
+    put:
+      tags: [OrgAgronomist]
+      summary: Обновить запись истории
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: historyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FieldCropUpsertRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "404":
+          description: Запись не найдена
+
+    delete:
+      tags: [OrgAgronomist]
+      summary: Удалить запись истории
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: historyId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Нельзя удалить последнюю запись истории поля
+        "404":
+          description: Запись не найдена
+
+  /api/org/agronomist/fields/intake:
+    post:
+      tags: [OrgAgronomist]
+      summary: Создать новое поле и первую запись истории
+      description: Создаёт поле, добавляет первую запись истории и, если контур пересекается с другими полями организации, записывает пары в таблицу `field_intersections`.
+      security:
+        - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NewFieldIntakeRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActionMessageResponse"
+        "400":
+          description: Некорректная геометрия или неизвестная культура
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Сессия после входа через POST /login
+
+  schemas:
+    FieldFeatureCollection:
+      type: object
+      required: [type, features]
+      properties:
+        type:
+          type: string
+          example: FeatureCollection
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldFeature"
+
+    FieldFeature:
+      type: object
+      required: [type, id, properties, geometry]
+      properties:
+        type:
+          type: string
+          example: Feature
+        id:
+          type: integer
+          format: int64
+        properties:
+          $ref: "#/components/schemas/FieldProperties"
+        geometry:
+          $ref: "#/components/schemas/GeoJSONGeometry"
+
+    FieldProperties:
+      type: object
+      required: [id, name, area, active, history]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        area:
+          type: number
+          format: double
+        active:
+          type: boolean
+          description: TRUE - активное поле, FALSE - устаревшее поле
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldHistoryItem"
+
+    FieldHistoryItem:
+      type: object
+      properties:
+        fieldCropId:
+          type: integer
+          format: int64
+          nullable: true
+        cropId:
+          type: integer
+          format: int64
+          nullable: true
+        cropName:
+          type: string
+          nullable: true
+        sowingDate:
+          type: string
+          nullable: true
+        harvestDate:
+          type: string
+          nullable: true
+        sownAreaHa:
+          type: number
+          nullable: true
+        harvestAreaHa:
+          type: number
+          nullable: true
+        actualYield:
+          type: number
+          nullable: true
+        totalYield:
+          type: number
+          nullable: true
+        plannedYield:
+          type: number
+          nullable: true
+        forecastedYield:
+          type: number
+          nullable: true
+        sourceData:
+          type: string
+          nullable: true
+        sowingDetails:
+          type: string
+          nullable: true
+        cropYear:
+          type: integer
+          nullable: true
+        analyticsDate:
+          type: string
+          nullable: true
+        ndviUrl:
+          type: string
+          nullable: true
+        ndviCreatedAt:
+          type: string
+          nullable: true
+
+    GeoJSONGeometry:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type:
+          type: string
+          enum: [Point, LineString, Polygon, MultiPolygon]
+        coordinates: {}
+
+    NdviTileUrlResponse:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: URL шаблон с плейсхолдерами {z}/{x}/{y}
+          example: "https://example.com/tiles/{z}/{x}/{y}"
+
+    NdviOrgTileResponse:
+      type: object
+      required: [url, organizationName, date]
+      properties:
+        url:
+          type: string
+        organizationName:
+          type: string
+          description: Название организации из справочника (может быть пустой строкой)
+        date:
+          type: string
+
+    NdviValueResponse:
+      type: object
+      properties:
+        value:
+          type: number
+          format: double
+          nullable: true
+        msg:
+          type: string
+          nullable: true
+
+    SimpleError:
+      type: object
+      properties:
+        error:
+          type: string
+          example: "Некорректный field_id"
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Описание ошибки"
+
+    SessionContext:
+      type: object
+      properties:
+        userId:
+          type: integer
+          format: int64
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+          description: Название организации для отображения
+        login:
+          type: string
+        fullName:
+          type: string
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        admin:
+          type: boolean
+        orgManager:
+          type: boolean
+        agronomist:
+          type: boolean
+        role:
+          type: string
+        roleLabel:
+          type: string
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    OrgManagerSummary:
+      type: object
+      required: [organizationId, organizationName, currentLogin, pending, invites, csrf]
+      properties:
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+        currentLogin:
+          type: string
+        currentUserFullName:
+          type: string
+          description: ФИО для отображения; при отсутствии данных — логин
+        pending:
+          type: array
+          items:
+            $ref: "#/components/schemas/PendingRegistrationItem"
+        invites:
+          type: array
+          items:
+            $ref: "#/components/schemas/InviteLinkItem"
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    PendingRegistrationItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        login:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    InviteLinkItem:
+      type: object
+      properties:
+        token:
+          type: string
+        registerUrl:
+          type: string
+          description: Относительный путь, напр. /register?ref=...
+
+    CsrfInfo:
+      type: object
+      nullable: true
+      properties:
+        parameterName:
+          type: string
+          nullable: true
+        headerName:
+          type: string
+          nullable: true
+          example: "X-XSRF-TOKEN"
+        token:
+          type: string
+          nullable: true
+
+    ActionResult:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        message:
+          type: string
+
+    InviteCreated:
+      type: object
+      properties:
+        token:
+          type: string
+        registerUrl:
+          type: string
+        message:
+          type: string
+
+    UserIdRequest:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          type: integer
+          format: int64
+
+    RoleUpdateRequest:
+      type: object
+      required: [userId, role]
+      properties:
+        userId:
+          type: integer
+          format: int64
+        role:
+          type: string
+          description: USER | AGRONOMIST | ORG_MANAGER | ORG_ADMIN
+          enum: [USER, AGRONOMIST, ORG_MANAGER, ORG_ADMIN]
+
+    OrgMemberItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+        login:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        roleLabel:
+          type: string
+        registrationStatus:
+          type: string
+        active:
+          type: boolean
+        currentUser:
+          type: boolean
+
+    AdminOrgSummary:
+      type: object
+      required: [organizationId, organizationName, currentLogin, members, csrf]
+      properties:
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+        currentLogin:
+          type: string
+        currentUserFullName:
+          type: string
+        members:
+          type: array
+          items:
+            $ref: "#/components/schemas/OrgMemberItem"
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    TokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    ActionMessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        id:
+          type: integer
+          format: int64
+
+    FieldStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          description: ACTIVE | OBSOLETE
+          enum: [ACTIVE, OBSOLETE]
+
+    FieldCropUpsertRequest:
+      type: object
+      required: [cropId, cropYear]
+      properties:
+        cropId:
+          type: integer
+          format: int64
+        sowingDate:
+          type: string
+          format: date
+          nullable: true
+        harvestDate:
+          type: string
+          format: date
+          nullable: true
+        sownAreaHa:
+          type: number
+          nullable: true
+        harvestAreaHa:
+          type: number
+          nullable: true
+        actualYield:
+          type: number
+          nullable: true
+        totalYield:
+          type: number
+          nullable: true
+        plannedYield:
+          type: number
+          nullable: true
+        forecastedYield:
+          type: number
+          nullable: true
+        sourceData:
+          type: string
+          nullable: true
+        sowingDetails:
+          type: string
+          nullable: true
+        cropYear:
+          type: integer
+
+    FieldCropHistoryItem:
+      type: object
+      properties:
+        historyId:
+          type: integer
+          format: int64
+        cropId:
+          type: integer
+          format: int64
+        cropName:
+          type: string
+        sowingDate:
+          type: string
+          format: date
+          nullable: true
+        harvestDate:
+          type: string
+          format: date
+          nullable: true
+        sownAreaHa:
+          type: number
+          nullable: true
+        harvestAreaHa:
+          type: number
+          nullable: true
+        actualYield:
+          type: number
+          nullable: true
+        totalYield:
+          type: number
+          nullable: true
+        plannedYield:
+          type: number
+          nullable: true
+        forecastedYield:
+          type: number
+          nullable: true
+        sourceData:
+          type: string
+          nullable: true
+        sowingDetails:
+          type: string
+          nullable: true
+        cropYear:
+          type: integer
+          nullable: true
+
+    AgronomistSummary:
+      type: object
+      properties:
+        organizationId:
+          type: integer
+          format: int64
+        organizationName:
+          type: string
+        currentLogin:
+          type: string
+        currentUserFullName:
+          type: string
+        fields:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldOptionItem"
+        obsoleteFields:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldOptionItem"
+        crops:
+          type: array
+          items:
+            $ref: "#/components/schemas/CropOptionItem"
+        csrf:
+          $ref: "#/components/schemas/CsrfInfo"
+
+    FieldOptionItem:
+      type: object
+      properties:
+        fieldId:
+          type: integer
+          format: int64
+        fieldName:
+          type: string
+
+    CropOptionItem:
+      type: object
+      properties:
+        cropId:
+          type: integer
+          format: int64
+        cropName:
+          type: string
+
+    NewFieldIntakeRequest:
+      type: object
+      required: [fieldName, geometry, history]
+      properties:
+        fieldName:
+          type: string
+        geometry:
+          type: object
+          required: [type, coordinates]
+          properties:
+            type:
+              type: string
+            coordinates: {}
+        history:
+          $ref: "#/components/schemas/FieldCropUpsertRequest"
