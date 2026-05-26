@@ -19,6 +19,7 @@ import java.util.List;
 public class JdbcFieldRepository implements FieldRepository {
     private static final Logger log = LoggerFactory.getLogger(JdbcFieldRepository.class);
 
+    /** Общий SELECT: поле, GeoJSON-контур, история посева и последний NDVI-слой. */
     private static final String HISTORY_SELECT_COLUMNS = """
             SELECT f.id                                      AS field_id,
                    f.field_name                              AS field_name,
@@ -44,10 +45,12 @@ public class JdbcFieldRepository implements FieldRepository {
                    fa_latest.ndvi_created_at                 AS ndvi_created_at
             """;
 
+    /** Подтягивает название культуры из справочника crops. */
     private static final String JOIN_CROPS_ON_CROP_ID = """
             LEFT JOIN crops c ON c.crop_id = fc.crop_id
             """;
 
+    /** Последняя по дате аналитика и ссылка на NDVI для записи истории посева. */
     private static final String JOIN_LATEST_NDVI_ANALYTICS = """
             LEFT JOIN LATERAL (
                SELECT fa.record_date AS analytics_date,
@@ -61,10 +64,12 @@ public class JdbcFieldRepository implements FieldRepository {
             ) fa_latest ON TRUE
             """;
 
+    /** Сортировка: поле, год культуры, id записи истории. */
     private static final String HISTORY_ORDER_BY = """
             ORDER BY f.id, fc.crop_year NULLS LAST, fc.history_id
             """;
 
+    /** Все активные поля организации с историей посевов (карта /get_fields). */
     private static final String GET_FIELDS_WITH_HISTORY_SQL = HISTORY_SELECT_COLUMNS + """
             FROM fields f
             INNER JOIN field_crops fc ON fc.field_id = f.id
@@ -73,6 +78,10 @@ public class JdbcFieldRepository implements FieldRepository {
               AND COALESCE(f.is_active, TRUE)
             """ + HISTORY_ORDER_BY;
 
+    /**
+     * Поля, уже записанные как пересекающиеся с заданным fieldId в таблице field_intersections
+     * (без повторного ST_Intersects; для API /api/fields/{id}/intersections).
+     */
     private static final String GET_INTERSECTING_FIELDS_WITH_HISTORY_SQL = HISTORY_SELECT_COLUMNS + """
             FROM field_intersections fi
             JOIN fields f ON (
@@ -119,6 +128,7 @@ public class JdbcFieldRepository implements FieldRepository {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    /** Проверяет, что поле привязано к организации через field_crops. */
     private static final String FIELD_BELONGS_TO_ORG_SQL = """
             SELECT EXISTS (
                 SELECT 1 FROM field_crops fc
@@ -127,6 +137,7 @@ public class JdbcFieldRepository implements FieldRepository {
             )
             """;
 
+    /** Переводит поле в активное/неактивное (OBSOLETE), только внутри своей организации. */
     private static final String UPDATE_FIELD_ACTIVE_STATUS_SQL = """
             UPDATE fields f
             SET is_active = ?
@@ -138,17 +149,20 @@ public class JdbcFieldRepository implements FieldRepository {
                 )
             """;
 
+    /** Удаляет строку поля из fields (после очистки связанных данных). */
     private static final String DELETE_FIELD_SQL = """
             DELETE FROM fields
             WHERE id = ?
             """;
 
+    /** Удаляет историю посевов поля в рамках организации. */
     private static final String DELETE_FIELD_CROPS_SQL = """
             DELETE FROM field_crops
             WHERE field_id = ?
               AND organization_id = ?
             """;
 
+    /** Удаляет аналитику NDVI, привязанную к истории посевов поля. */
     private static final String DELETE_FIELD_ANALYTICS_SQL = """
             DELETE FROM field_analytics
             WHERE field_crop_id IN (
@@ -159,6 +173,10 @@ public class JdbcFieldRepository implements FieldRepository {
             )
             """;
 
+    /**
+     * Создаёт поле: контур из GeoJSON (SRID 4326), имя и площадь в га
+     * (ST_Area по geography / 10000).
+     */
     private static final String INSERT_FIELD_SQL = """
             INSERT INTO fields (geom, field_name, field_area, is_active)
             VALUES (
@@ -169,17 +187,26 @@ public class JdbcFieldRepository implements FieldRepository {
             )
             """;
 
+    /**
+     * Сохраняет пару пересекающихся полей (меньший id — field_id_left, больший — field_id_right).
+     * Дубликаты пар игнорируются.
+     */
     private static final String INSERT_FIELD_INTERSECTION_SQL = """
             INSERT INTO field_intersections (organization_id, field_id_left, field_id_right)
             VALUES (?, LEAST(?, ?), GREATEST(?, ?))
             ON CONFLICT (field_id_left, field_id_right) DO NOTHING
             """;
 
+    /** Удаляет все записи о пересечениях, где участвует данное поле. */
     private static final String DELETE_FIELD_INTERSECTIONS_BY_FIELD_SQL = """
             DELETE FROM field_intersections
             WHERE field_id_left = ? OR field_id_right = ?
             """;
 
+    /**
+     * Ищет поля организации, чей контур пересекается с переданной GeoJSON-геометрией
+     * (PostGIS ST_Intersects). Используется при создании/проверке нового поля.
+     */
     private static final String INTERSECTING_FIELDS_SQL = """
             SELECT DISTINCT f.id, f.field_name
             FROM fields f
@@ -191,6 +218,7 @@ public class JdbcFieldRepository implements FieldRepository {
                   )
             """;
 
+    /** То же, что INTERSECTING_FIELDS_SQL, но без сравнения с самим собой (при редактировании поля). */
     private static final String INTERSECTING_FIELDS_EXCLUDE_SQL = INTERSECTING_FIELDS_SQL + """
               AND f.id <> ?
             """;

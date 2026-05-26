@@ -10,6 +10,7 @@ import java.util.Optional;
 @Repository
 public class JdbcNdviAnalyticsRepository implements NdviAnalyticsRepository {
 
+    /** URL растрового слоя NDVI для поля на указанную дату (последняя подходящая запись). */
     private static final String NDVI_URL_FOR_FIELD_ON_DATE = """
             SELECT nd.url
             FROM field_analytics fa
@@ -25,6 +26,7 @@ public class JdbcNdviAnalyticsRepository implements NdviAnalyticsRepository {
             LIMIT 1
             """;
 
+    /** Уникальные id полей организации (для сводного NDVI-слоя). */
     private static final String DISTINCT_FIELD_IDS_FOR_ORG = """
             SELECT DISTINCT fc.field_id
             FROM field_crops fc
@@ -32,6 +34,10 @@ public class JdbcNdviAnalyticsRepository implements NdviAnalyticsRepository {
             ORDER BY fc.field_id
             """;
 
+    /**
+     * Находит поле организации, в чей контур попадает точка (lon, lat);
+     * PostGIS ST_Contains, SRID 4326.
+     */
     private static final String FIELD_CONTAINING_POINT = """
             SELECT f.id
             FROM fields f
@@ -72,7 +78,6 @@ public class JdbcNdviAnalyticsRepository implements NdviAnalyticsRepository {
 
     @Override
     public Optional<Long> findFieldIdCoveringPoint(long organizationId, double latitude, double longitude) {
-        // PostGIS: ST_MakePoint(lon, lat)
         List<Long> rows = jdbcTemplate.query(
                 FIELD_CONTAINING_POINT,
                 (rs, rowNum) -> rs.getLong(1),

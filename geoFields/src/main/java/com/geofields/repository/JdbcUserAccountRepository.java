@@ -12,9 +12,78 @@ import java.util.Optional;
 @Repository
 public class JdbcUserAccountRepository implements UserAccountRepository {
 
+    /** Базовый SELECT полей пользователя для списка участников организации. */
     private static final String SELECT_ORG_MEMBER_BASE = """
             SELECT id, login, email, last_name, first_name, middle_name, role, registration_status, is_active
             FROM users
+            """;
+
+    /** Участники организации, отсортированные по id. */
+    private static final String FIND_MEMBERS_BY_ORG_SQL = SELECT_ORG_MEMBER_BASE + """
+            WHERE organization_id = ?
+            ORDER BY id
+            """;
+
+    /** Один участник организации по user id. */
+    private static final String FIND_MEMBER_SQL = SELECT_ORG_MEMBER_BASE + """
+            WHERE organization_id = ? AND id = ?
+            """;
+
+    /** Проверка занятости логина. */
+    private static final String COUNT_BY_LOGIN_SQL = "SELECT COUNT(*) FROM users WHERE login = ?";
+
+    /** Проверка занятости email. */
+    private static final String COUNT_BY_EMAIL_SQL = "SELECT COUNT(*) FROM users WHERE email = ?";
+
+    /**
+     * Регистрация пользователя сразу в статусе APPROVED и is_active = TRUE
+     * (например, по инвайт-ссылке).
+     */
+    private static final String INSERT_APPROVED_USER_SQL = """
+            INSERT INTO users (login, email, password_hash, organization_id, role, is_active, registration_status,
+                               last_name, first_name, middle_name)
+            VALUES (?, ?, ?, ?, ?, TRUE, 'APPROVED', ?, ?, ?)
+            """;
+
+    /**
+     * Заявка на регистрацию: PENDING, is_active = FALSE
+     * (ожидает одобрения менеджером).
+     */
+    private static final String INSERT_PENDING_USER_SQL = """
+            INSERT INTO users (login, email, password_hash, organization_id, role, is_active, registration_status,
+                               last_name, first_name, middle_name)
+            VALUES (?, ?, ?, ?, ?, FALSE, 'PENDING', ?, ?, ?)
+            """;
+
+    /** Заявки на регистрацию в организации (статус PENDING). */
+    private static final String FIND_PENDING_REGISTRATIONS_SQL = """
+            SELECT id, login, email, last_name, first_name, middle_name, created_at FROM users
+            WHERE organization_id = ? AND registration_status = 'PENDING'
+            ORDER BY created_at DESC
+            """;
+
+    /** Одобрение заявки: APPROVED и активация учётной записи. */
+    private static final String APPROVE_USER_SQL = """
+            UPDATE users SET registration_status = 'APPROVED', is_active = TRUE
+            WHERE id = ? AND organization_id = ? AND registration_status = 'PENDING'
+            """;
+
+    /** Отклонение заявки: REJECTED и деактивация. */
+    private static final String REJECT_USER_SQL = """
+            UPDATE users SET registration_status = 'REJECTED', is_active = FALSE
+            WHERE id = ? AND organization_id = ? AND registration_status = 'PENDING'
+            """;
+
+    /** Смена роли пользователя внутри организации. */
+    private static final String UPDATE_USER_ROLE_SQL = "UPDATE users SET role = ? WHERE id = ? AND organization_id = ?";
+
+    /** Удаление пользователя из организации. */
+    private static final String DELETE_USER_SQL = "DELETE FROM users WHERE id = ? AND organization_id = ?";
+
+    /** Число одобренных администраторов организации (для проверки «не удалить последнего»). */
+    private static final String COUNT_APPROVED_ADMINS_SQL = """
+            SELECT COUNT(*) FROM users
+            WHERE organization_id = ? AND role = 'ORG_ADMIN' AND registration_status = 'APPROVED'
             """;
 
     private final JdbcTemplate jdbcTemplate;
@@ -25,21 +94,13 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
 
     @Override
     public boolean existsByLogin(String login) {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM users WHERE login = ?",
-                Long.class,
-                login
-        );
+        Long count = jdbcTemplate.queryForObject(COUNT_BY_LOGIN_SQL, Long.class, login);
         return count != null && count > 0;
     }
 
     @Override
     public boolean existsByEmail(String email) {
-        Long count = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM users WHERE email = ?",
-                Long.class,
-                email
-        );
+        Long count = jdbcTemplate.queryForObject(COUNT_BY_EMAIL_SQL, Long.class, email);
         return count != null && count > 0;
     }
 
@@ -54,11 +115,7 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
             String firstName,
             String middleName) {
         jdbcTemplate.update(
-                """
-                        INSERT INTO users (login, email, password_hash, organization_id, role, is_active, registration_status,
-                                           last_name, first_name, middle_name)
-                        VALUES (?, ?, ?, ?, ?, TRUE, 'APPROVED', ?, ?, ?)
-                        """,
+                INSERT_APPROVED_USER_SQL,
                 login,
                 email,
                 passwordHash,
@@ -80,11 +137,7 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
             String firstName,
             String middleName) {
         jdbcTemplate.update(
-                """
-                        INSERT INTO users (login, email, password_hash, organization_id, role, is_active, registration_status,
-                                           last_name, first_name, middle_name)
-                        VALUES (?, ?, ?, ?, ?, FALSE, 'PENDING', ?, ?, ?)
-                        """,
+                INSERT_PENDING_USER_SQL,
                 login,
                 email,
                 passwordHash,
@@ -98,11 +151,7 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
     @Override
     public List<PendingRegistrationRow> findPendingRegistrations(long organizationId) {
         return jdbcTemplate.query(
-                """
-                        SELECT id, login, email, last_name, first_name, middle_name, created_at FROM users
-                        WHERE organization_id = ? AND registration_status = 'PENDING'
-                        ORDER BY created_at DESC
-                        """,
+                FIND_PENDING_REGISTRATIONS_SQL,
                 (rs, rowNum) -> new PendingRegistrationRow(
                         rs.getLong("id"),
                         rs.getString("login"),
@@ -117,33 +166,18 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
 
     @Override
     public int approveUser(long userId, long organizationId) {
-        return jdbcTemplate.update(
-                """
-                        UPDATE users SET registration_status = 'APPROVED', is_active = TRUE
-                        WHERE id = ? AND organization_id = ? AND registration_status = 'PENDING'
-                        """,
-                userId,
-                organizationId);
+        return jdbcTemplate.update(APPROVE_USER_SQL, userId, organizationId);
     }
 
     @Override
     public int rejectUser(long userId, long organizationId) {
-        return jdbcTemplate.update(
-                """
-                        UPDATE users SET registration_status = 'REJECTED', is_active = FALSE
-                        WHERE id = ? AND organization_id = ? AND registration_status = 'PENDING'
-                        """,
-                userId,
-                organizationId);
+        return jdbcTemplate.update(REJECT_USER_SQL, userId, organizationId);
     }
 
     @Override
     public List<OrganizationMemberRow> findMembersByOrganization(long organizationId) {
         return jdbcTemplate.query(
-                SELECT_ORG_MEMBER_BASE + """
-                        WHERE organization_id = ?
-                        ORDER BY id
-                        """,
+                FIND_MEMBERS_BY_ORG_SQL,
                 this::mapOrganizationMemberRow,
                 organizationId);
     }
@@ -155,9 +189,7 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
     @Override
     public Optional<OrganizationMemberRow> findMember(long organizationId, long userId) {
         List<OrganizationMemberRow> rows = jdbcTemplate.query(
-                SELECT_ORG_MEMBER_BASE + """
-                        WHERE organization_id = ? AND id = ?
-                        """,
+                FIND_MEMBER_SQL,
                 this::mapOrganizationMemberRow,
                 organizationId,
                 userId);
@@ -166,27 +198,17 @@ public class JdbcUserAccountRepository implements UserAccountRepository {
 
     @Override
     public int updateUserRole(long userId, long organizationId, UserRole role) {
-        return jdbcTemplate.update(
-                "UPDATE users SET role = ? WHERE id = ? AND organization_id = ?",
-                role.name(),
-                userId,
-                organizationId);
+        return jdbcTemplate.update(UPDATE_USER_ROLE_SQL, role.name(), userId, organizationId);
     }
 
     @Override
     public int deleteUser(long userId, long organizationId) {
-        return jdbcTemplate.update("DELETE FROM users WHERE id = ? AND organization_id = ?", userId, organizationId);
+        return jdbcTemplate.update(DELETE_USER_SQL, userId, organizationId);
     }
 
     @Override
     public long countApprovedAdmins(long organizationId) {
-        Long n = jdbcTemplate.queryForObject(
-                """
-                        SELECT COUNT(*) FROM users
-                        WHERE organization_id = ? AND role = 'ORG_ADMIN' AND registration_status = 'APPROVED'
-                        """,
-                Long.class,
-                organizationId);
+        Long n = jdbcTemplate.queryForObject(COUNT_APPROVED_ADMINS_SQL, Long.class, organizationId);
         return n != null ? n : 0L;
     }
 
