@@ -41,6 +41,7 @@ x-python-volumes: &python-volumes
 services:
   minio:
     image: minio/minio:latest
+    #platform: linux/amd64
     container_name: geofields-minio
     restart: unless-stopped
     environment:
