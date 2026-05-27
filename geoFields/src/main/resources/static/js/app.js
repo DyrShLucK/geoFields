@@ -9,15 +9,18 @@ const _pythonApiBase = String(PYTHON_API_URL || "").trim().replace(/\/$/, "");
 const fetchOpts = {
     credentials: _apiBase ? "include" : "same-origin"
 };
-const pythonFetchOpts = { // Отдельные опции для Python, если нужно
-    credentials: _pythonApiBase ? "include" : "same-origin"
-};
+const pythonFetchOpts = fetchOpts; // через Java нужна сессия и CSRF
 
 function apiPath(path) {
     const p = path.startsWith("/") ? path : "/" + path;
     return _apiBase ? _apiBase + p : p;
 }
-function pythonApiPath(path) { // Для Python API
+
+// =====================================================
+// PYTHON API PATH (СОВМЕСТИМОСТЬ)
+// =====================================================
+function pythonApiPath(path) {
+    // Прямой путь к Python-сервису (как было раньше).
     const p = path.startsWith("/") ? path : "/" + path;
     return _pythonApiBase ? _pythonApiBase + p : p;
 }
@@ -41,6 +44,19 @@ let measureGeoJson = {
 };
 
 let activeNdviLayerIds = [];
+let highlightedFieldId = null;
+let activeFieldPopup = null;
+let activeFieldPopupFieldId = null;
+let suppressPopupCloseHighlightReset = false;
+const ndviSelectedFieldIds = new Set();
+let fieldContextMenuTargetId = null;
+
+const ANALYTICS_PANEL_WIDTH_KEY = "geofields-analytics-panel-width";
+const ANALYTICS_PANEL_MIN_WIDTH = 320;
+const ANALYTICS_PANEL_MAX_WIDTH_RATIO = 0.75;
+const FIELD_HISTORY_PANEL_HEIGHT_KEY = "geofields-field-history-panel-height";
+const FIELD_HISTORY_PANEL_MIN_HEIGHT = 180;
+const FIELD_HISTORY_PANEL_MAX_HEIGHT_RATIO = 0.65;
 
 // Шаблоны ролевой модели
 const MENU_TEMPLATES = {
@@ -80,8 +96,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     try { setupFilterControls(); } catch (e) { console.error("Сбой FilterControls:", e); }
     try { setupImportModal(); } catch (e) { console.error("Сбой ImportModal:", e); }
     try { setupAnalyticsTabs(); } catch (e) { console.error("Сбой AnalyticsTabs:", e); }
+    try { ensureWeatherTabFallbackContent(); } catch (e) { console.error("Сбой WeatherFallback:", e); }
     try { setupSidebarAndPanels(); } catch (e) { console.error("Сбой SidebarAndPanels:", e); }
+    try { ensureNdviLegend(); } catch (e) { console.error("Сбой NdviLegend:", e); }
+    try { ensureFieldContextMenu(); } catch (e) { console.error("Сбой FieldContextMenu:", e); }
+    try { setupSlopeAnalyticsCard(); } catch (e) { console.error("Сбой SlopeAnalytics:", e); }
+    try { setupAnalyticsCardCollapsing(); } catch (e) { console.error("Сбой AnalyticsCollapsing:", e); }
     try { setupNdviCalculation(); } catch (e) { console.error("Сбой NdviCalculation:", e); }
+    try { setupSlopeCalculation(); } catch (e) { console.error("Сбой SlopeCalculation:", e); }
     try { initChartTooltips(); } catch (e) { console.error("Сбой ChartTooltips:", e); }
 
     // 3. Безопасная инициализация карты MapLibre GL
@@ -102,6 +124,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 // БЕЗОПАСНАЯ ИНИЦИАЛИЗАЦИЯ КАРТЫ
 // =====================================================
 function initMap() {
+    // Меньше одновременных raster-запросов => меньше фризов при pan/zoom.
+    if (typeof maplibregl?.setMaxParallelImageRequests === "function") {
+        maplibregl.setMaxParallelImageRequests(8);
+    }
+
     map = new maplibregl.Map({
         container: "map",
         style: {
@@ -187,6 +214,9 @@ async function checkSessionAndBuildMenu() {
     updateSyncStatus(true);
 }
 
+// =====================================================
+// ПОСТРОЕНИЕ МЕНЮ ПО РОЛИ
+// =====================================================
 function buildMenuForRole(role) {
     const menuContainer = document.getElementById("dynamic-menu");
     if (!menuContainer) return;
@@ -217,6 +247,9 @@ function buildMenuForRole(role) {
     });
 }
 
+// =====================================================
+// ОБНОВЛЕНИЕ СТАТУСА СИНХРОНИЗАЦИИ
+// =====================================================
 function updateSyncStatus(isOnline) {
     const statusEl = document.getElementById("connection-status");
     if (!statusEl) return;
@@ -244,6 +277,579 @@ document.getElementById("connection-status")?.addEventListener("click", async ()
 });
 
 // =====================================================
+// ПОЛЯ: ВЫДЕЛЕНИЕ, NDVI, КОНТЕКСТНОЕ МЕНЮ
+// =====================================================
+function parseFieldHistory(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === "string") {
+        try {
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    }
+    return [];
+}
+
+function escapeHtml(value) {
+    if (value == null) return "";
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function getFeatureFieldId(feature) {
+    const props = feature?.properties || {};
+    return String(props.id ?? props.fieldId ?? feature?.id ?? "");
+}
+
+function getFieldBoundsById(fieldId) {
+    if (!loadedFieldsGeoJson?.features?.length) return null;
+    const targetId = String(fieldId);
+    const feature = loadedFieldsGeoJson.features.find(f => getFeatureFieldId(f) === targetId);
+    if (!feature?.geometry) return null;
+
+    let minLng = Infinity;
+    let minLat = Infinity;
+    let maxLng = -Infinity;
+    let maxLat = -Infinity;
+
+    const scan = (coords) => {
+        if (!Array.isArray(coords)) return;
+        if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+            const lng = Number(coords[0]);
+            const lat = Number(coords[1]);
+            if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+            minLng = Math.min(minLng, lng);
+            minLat = Math.min(minLat, lat);
+            maxLng = Math.max(maxLng, lng);
+            maxLat = Math.max(maxLat, lat);
+            return;
+        }
+        coords.forEach(scan);
+    };
+    scan(feature.geometry.coordinates);
+
+    if (![minLng, minLat, maxLng, maxLat].every(Number.isFinite)) return null;
+    return [minLng, minLat, maxLng, maxLat];
+}
+
+function toMapFeatureId(fieldId) {
+    const n = Number(fieldId);
+    return Number.isFinite(n) ? n : fieldId;
+}
+
+function setFieldFeatureState(fieldId, statePatch) {
+    if (!map || fieldId == null || fieldId === "") return;
+    try {
+        map.setFeatureState(
+            { source: "fields-source", id: toMapFeatureId(fieldId) },
+            statePatch
+        );
+    } catch (e) {
+        console.warn("setFeatureState:", fieldId, e);
+    }
+}
+
+function applyFieldHighlight(fieldId) {
+    if (highlightedFieldId != null) {
+        setFieldFeatureState(highlightedFieldId, { highlight: false });
+    }
+    highlightedFieldId = fieldId != null ? String(fieldId) : null;
+    if (highlightedFieldId != null) {
+        setFieldFeatureState(highlightedFieldId, { highlight: true });
+    }
+}
+
+function syncNdviCheckboxUI(fieldId, selected) {
+    const cb = document.querySelector(`.ndvi-filter-checkbox[value="${fieldId}"]`);
+    if (cb) cb.checked = selected;
+}
+
+function selectAllNdviFields(selected) {
+    document.querySelectorAll(".ndvi-filter-checkbox").forEach(cb => {
+        setNdviFieldSelected(cb.value, selected);
+    });
+}
+
+function selectAllCheckboxes(cssClass, selected) {
+    document.querySelectorAll(`.${cssClass}`).forEach(cb => {
+        cb.checked = selected;
+    });
+}
+
+function selectAllCropFields(selected) {
+    selectAllCheckboxes("crop-filter-checkbox", selected);
+    updateCropDistributionChart();
+}
+
+function selectAllSoilFields(selected) {
+    selectAllCheckboxes("soil-filter-checkbox", selected);
+    document.getElementById("soil-fields-checklist")?.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function ensureFieldsToolbar(toolbarId, containerId, onSelectAll, onSelectNone) {
+    const box = document.getElementById(containerId);
+    if (!box || document.getElementById(toolbarId)) return;
+
+    const toolbar = document.createElement("div");
+    toolbar.id = toolbarId;
+    toolbar.className = "ndvi-fields-toolbar";
+    toolbar.innerHTML = `
+        <button type="button" class="ndvi-list-btn" data-action="all">Все поля</button>
+        <button type="button" class="ndvi-list-btn" data-action="none">Снять все</button>
+    `;
+    box.parentElement?.insertBefore(toolbar, box);
+    toolbar.querySelector("[data-action='all']")?.addEventListener("click", onSelectAll);
+    toolbar.querySelector("[data-action='none']")?.addEventListener("click", onSelectNone);
+}
+
+function ensureNdviFieldsToolbar() {
+    ensureFieldsToolbar(
+        "ndvi-fields-toolbar",
+        "ndvi-fields-checklist",
+        () => selectAllNdviFields(true),
+        () => selectAllNdviFields(false)
+    );
+}
+
+function ensureCropFieldsToolbar() {
+    ensureFieldsToolbar(
+        "crop-fields-toolbar",
+        "crop-fields-checklist",
+        () => selectAllCropFields(true),
+        () => selectAllCropFields(false)
+    );
+}
+
+function ensureSoilFieldsToolbar() {
+    ensureFieldsToolbar(
+        "soil-fields-toolbar",
+        "soil-fields-checklist",
+        () => selectAllSoilFields(true),
+        () => selectAllSoilFields(false)
+    );
+}
+
+function toggleAnalyticsCheckbox(cssClass, fieldId) {
+    const cb = document.querySelector(`.${cssClass}[value="${CSS.escape(String(fieldId))}"]`);
+    if (!cb) return;
+    cb.checked = !cb.checked;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function setNdviFieldSelected(fieldId, selected) {
+    const idStr = String(fieldId);
+    if (selected) {
+        ndviSelectedFieldIds.add(idStr);
+    } else {
+        ndviSelectedFieldIds.delete(idStr);
+    }
+    syncNdviCheckboxUI(idStr, selected);
+    setFieldFeatureState(idStr, { ndviSelected: selected });
+    updateFieldContextMenuLabels();
+}
+
+function toggleNdviFieldSelected(fieldId) {
+    setNdviFieldSelected(fieldId, !ndviSelectedFieldIds.has(String(fieldId)));
+}
+
+function hideFieldContextMenu() {
+    document.getElementById("field-context-menu")?.classList.add("hidden");
+    fieldContextMenuTargetId = null;
+}
+
+function updateFieldContextMenuLabels() {
+    if (fieldContextMenuTargetId == null) return;
+    const menu = document.getElementById("field-context-menu");
+    if (!menu) return;
+
+    const id = String(fieldContextMenuTargetId);
+    const ndviBtn = menu.querySelector("[data-action='toggle-ndvi']");
+    const cropBtn = menu.querySelector("[data-action='toggle-crop']");
+    const soilBtn = menu.querySelector("[data-action='toggle-soil']");
+
+    if (ndviBtn) {
+        const ndviSelected = ndviSelectedFieldIds.has(id);
+        ndviBtn.textContent = ndviSelected ? "Убрать из расчёта NDVI" : "Выбрать для NDVI";
+    }
+    if (cropBtn) {
+        const cropCb = document.querySelector(`.crop-filter-checkbox[value="${CSS.escape(id)}"]`);
+        cropBtn.textContent = cropCb?.checked
+            ? "Убрать из статистики культур"
+            : "Выбрать для статистики культур";
+    }
+    if (soilBtn) {
+        const soilCb = document.querySelector(`.soil-filter-checkbox[value="${CSS.escape(id)}"]`);
+        soilBtn.textContent = soilCb?.checked
+            ? "Убрать из статистики почвы"
+            : "Выбрать для статистики почвы";
+    }
+}
+
+function syncFieldHistoryPanelLayout() {
+    const panel = document.getElementById("field-history-panel");
+    const analytics = document.getElementById("analytics-panel");
+    if (!panel) return;
+    const rightInset = analytics?.classList.contains("open")
+        ? Math.round(analytics.getBoundingClientRect().width)
+        : 0;
+    panel.style.right = `${rightInset}px`;
+}
+
+function renderFieldHistoryPanel(fieldId, fieldName) {
+    const body = document.getElementById("field-history-body");
+    const title = document.getElementById("field-history-title");
+    if (!body || !title) return;
+    const idStr = String(fieldId);
+    const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === idStr);
+    const history = parseFieldHistory(feature?.properties?.history);
+    title.textContent = `История поля: ${fieldName || `#${idStr}`}`;
+    if (!history.length) {
+        body.innerHTML = `<p class="muted font-sm m-0">История севооборота отсутствует.</p>`;
+        return;
+    }
+    const sorted = [...history].sort((a, b) => (b.cropYear || 0) - (a.cropYear || 0));
+    body.innerHTML = `
+        <table class="field-history-table">
+            <thead>
+                <tr>
+                    <th>Год</th>
+                    <th>Культура</th>
+                    <th>Посев</th>
+                    <th>Уборка</th>
+                    <th>Площадь, га</th>
+                    <th>Урожайность</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${sorted.map(r => `
+                    <tr>
+                        <td>${r.cropYear || "—"}</td>
+                        <td>${escapeHtml(r.cropName || "—")}</td>
+                        <td>${r.sowingDate || "—"}</td>
+                        <td>${r.harvestDate || "—"}</td>
+                        <td>${r.sownAreaHa || "—"}</td>
+                        <td>${r.actualYield || "—"}</td>
+                    </tr>
+                `).join("")}
+            </tbody>
+        </table>
+    `;
+}
+
+function openFieldHistoryPanel(fieldId, fieldName) {
+    const panel = ensureFieldHistoryPanel();
+    if (!panel) return;
+    renderFieldHistoryPanel(fieldId, fieldName);
+    syncFieldHistoryPanelLayout();
+    panel.classList.add("open");
+}
+
+function closeFieldHistoryPanel() {
+    document.getElementById("field-history-panel")?.classList.remove("open");
+}
+
+function ensureFieldHistoryPanel() {
+    let panel = document.getElementById("field-history-panel");
+    if (panel) return panel;
+    panel = document.createElement("section");
+    panel.id = "field-history-panel";
+    panel.className = "field-history-panel";
+    panel.innerHTML = `
+        <div class="field-history-resize-handle" id="field-history-resize-handle" title="Изменить высоту"></div>
+        <div class="field-history-header">
+            <div class="field-history-title" id="field-history-title">История поля</div>
+            <button type="button" class="field-history-close" id="field-history-close" aria-label="Закрыть">×</button>
+        </div>
+        <div class="field-history-body" id="field-history-body"></div>
+    `;
+    document.body.appendChild(panel);
+    document.getElementById("field-history-close")?.addEventListener("click", closeFieldHistoryPanel);
+
+    const handle = document.getElementById("field-history-resize-handle");
+    if (!handle) return panel;
+    const saved = Number(localStorage.getItem(FIELD_HISTORY_PANEL_HEIGHT_KEY));
+    if (saved >= FIELD_HISTORY_PANEL_MIN_HEIGHT) {
+        panel.style.setProperty("--field-history-panel-height", `${saved}px`);
+    }
+    const maxHeight = () => Math.round(window.innerHeight * FIELD_HISTORY_PANEL_MAX_HEIGHT_RATIO);
+    const clampHeight = (h) => Math.max(FIELD_HISTORY_PANEL_MIN_HEIGHT, Math.min(maxHeight(), Math.round(h)));
+    const applyHeight = (h) => {
+        const next = clampHeight(h);
+        panel.style.setProperty("--field-history-panel-height", `${next}px`);
+        return next;
+    };
+    let dragging = false;
+    let activePointerId = null;
+    const stopDrag = (e) => {
+        if (!dragging) return;
+        if (e?.pointerId != null && activePointerId != null && e.pointerId !== activePointerId) return;
+        dragging = false;
+        activePointerId = null;
+        handle.classList.remove("is-dragging");
+        panel.classList.remove("is-resizing");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        try {
+            if (e?.pointerId != null) handle.releasePointerCapture(e.pointerId);
+        } catch (_) { /* ignore */ }
+        const current = parseInt(getComputedStyle(panel).getPropertyValue("--field-history-panel-height"), 10);
+        if (Number.isFinite(current)) {
+            localStorage.setItem(FIELD_HISTORY_PANEL_HEIGHT_KEY, String(current));
+        }
+    };
+    const onPointerMove = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        const next = window.innerHeight - e.clientY;
+        applyHeight(next);
+    };
+    const startDrag = (e) => {
+        if (!panel.classList.contains("open")) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        dragging = true;
+        activePointerId = e.pointerId;
+        handle.classList.add("is-dragging");
+        panel.classList.add("is-resizing");
+        document.body.style.cursor = "ns-resize";
+        document.body.style.userSelect = "none";
+        try {
+            handle.setPointerCapture(e.pointerId);
+        } catch (_) { /* ignore */ }
+    };
+    handle.addEventListener("pointerdown", startDrag);
+    handle.addEventListener("pointermove", onPointerMove);
+    handle.addEventListener("pointerup", stopDrag);
+    handle.addEventListener("pointercancel", stopDrag);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", stopDrag);
+    window.addEventListener("resize", () => syncFieldHistoryPanelLayout());
+    return panel;
+}
+
+function showFieldContextMenu(screenX, screenY, fieldId, fieldName) {
+    const menu = document.getElementById("field-context-menu");
+    if (!menu) return;
+    fieldContextMenuTargetId = String(fieldId);
+    updateFieldContextMenuLabels();
+    const title = menu.querySelector("[data-field-title]");
+    if (title) title.textContent = fieldName || `Поле #${fieldId}`;
+    menu.classList.remove("hidden");
+    const pad = 8;
+    const rect = menu.getBoundingClientRect();
+    let left = screenX;
+    let top = screenY;
+    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+function ensureFieldContextMenu() {
+    const existing = document.getElementById("field-context-menu");
+    if (existing && !existing.querySelector("[data-action='toggle-crop']")) {
+        existing.remove();
+    }
+    if (document.getElementById("field-context-menu")) return;
+    const menu = document.createElement("div");
+    menu.id = "field-context-menu";
+    menu.className = "field-context-menu hidden";
+    menu.innerHTML = `
+        <div data-field-title style="padding:6px 12px 4px;font-size:12px;font-weight:600;color:#64748b;"></div>
+        <button type="button" data-action="show-history">Показать историю</button>
+        <button type="button" data-action="toggle-ndvi">Выбрать для NDVI</button>
+        <button type="button" data-action="toggle-crop">Выбрать для статистики культур</button>
+        <button type="button" data-action="toggle-soil">Выбрать для статистики почвы</button>
+    `;
+    document.body.appendChild(menu);
+
+    menu.querySelector("[data-action='show-history']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) {
+            const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === String(fieldContextMenuTargetId));
+            openFieldHistoryPanel(fieldContextMenuTargetId, feature?.properties?.name);
+        }
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='toggle-ndvi']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) toggleNdviFieldSelected(fieldContextMenuTargetId);
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='toggle-crop']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) toggleAnalyticsCheckbox("crop-filter-checkbox", fieldContextMenuTargetId);
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='toggle-soil']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) toggleAnalyticsCheckbox("soil-filter-checkbox", fieldContextMenuTargetId);
+        hideFieldContextMenu();
+    });
+
+    document.addEventListener("click", (e) => {
+        if (!menu.contains(e.target)) hideFieldContextMenu();
+    });
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") hideFieldContextMenu();
+    });
+}
+
+function onFieldLayerClick(e) {
+    if (isMeasuring || !e.features?.length) return;
+    const feature = e.features[0];
+    const fieldId = getFeatureFieldId(feature);
+    const properties = feature.properties || {};
+    if (activeFieldPopup) {
+        // При переключении между полями не сбрасываем highlight через close-обработчик старого popup.
+        suppressPopupCloseHighlightReset = true;
+        activeFieldPopup.remove();
+        activeFieldPopup = null;
+        activeFieldPopupFieldId = null;
+        suppressPopupCloseHighlightReset = false;
+    }
+    applyFieldHighlight(fieldId);
+
+    const name = properties.name || "Без названия";
+    const area = properties.area ? Number(properties.area).toFixed(1) : "Н/Д";
+    const historyRecords = parseFieldHistory(properties.history);
+
+    let latestRecordHtml = "";
+    if (historyRecords.length > 0) {
+        historyRecords.sort((a, b) => (b.cropYear || 0) - (a.cropYear || 0));
+        const latest = historyRecords[0];
+        const crop = latest.cropName || "Неизвестно";
+        const year = latest.cropYear || "—";
+        const sowing = latest.sowingDate || "—";
+        const yieldVal = latest.actualYield ? `${latest.actualYield} ц/га` : "—";
+        latestRecordHtml = `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; line-height: 1.4;">
+                <strong style="display:block; color: #0f172a; margin-bottom: 2px;">Последний сев (${year} г.):</strong>
+                <span style="display:block; color: #475569;">🌾 Культура: <strong style="color: #0f172a;">${crop}</strong></span>
+                <span style="display:block; color: #475569;">📅 Дата посева: ${sowing}</span>
+                <span style="display:block; color: #475569;">🚜 Урожайность: ${yieldVal}</span>
+            </div>
+        `;
+    } else {
+        latestRecordHtml = `
+            <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">
+                История севооборота отсутствует
+            </div>
+        `;
+    }
+
+    activeFieldPopup = new maplibregl.Popup({ closeOnClick: false })
+        .setLngLat(e.lngLat)
+        .setHTML(`
+            <div style="font-family:'Inter', sans-serif; padding:4px; min-width:180px;">
+                <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">🌿 ${name}</strong>
+                <span style="font-size:12px; color:#64748b; font-weight:500;">Площадь: ${area} га</span>
+                ${latestRecordHtml}
+            </div>
+        `);
+
+    activeFieldPopup.on("close", () => {
+        const closingFieldId = activeFieldPopupFieldId != null ? String(activeFieldPopupFieldId) : null;
+        if (!suppressPopupCloseHighlightReset && closingFieldId != null && highlightedFieldId === closingFieldId) {
+            applyFieldHighlight(null);
+        }
+        activeFieldPopup = null;
+        activeFieldPopupFieldId = null;
+    });
+
+    activeFieldPopup.addTo(map);
+    activeFieldPopupFieldId = fieldId;
+}
+
+function onMapClickClearFieldSelection(e) {
+    if (isMeasuring || !map) return;
+    const hit = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
+    if (hit.length > 0) return;
+    if (activeFieldPopup) {
+        suppressPopupCloseHighlightReset = true;
+        activeFieldPopup.remove();
+        activeFieldPopup = null;
+        activeFieldPopupFieldId = null;
+        suppressPopupCloseHighlightReset = false;
+    }
+    applyFieldHighlight(null);
+    hideFieldContextMenu();
+}
+
+function onFieldLayerContextMenu(e) {
+    if (isMeasuring || !e.features?.length) return;
+    e.preventDefault();
+    if (activeFieldPopup) {
+        suppressPopupCloseHighlightReset = true;
+        activeFieldPopup.remove();
+        activeFieldPopup = null;
+        activeFieldPopupFieldId = null;
+        suppressPopupCloseHighlightReset = false;
+    }
+    const feature = e.features[0];
+    const fieldId = getFeatureFieldId(feature);
+    applyFieldHighlight(fieldId);
+    const name = feature.properties?.name || `Поле #${fieldId}`;
+    showFieldContextMenu(e.originalEvent.clientX, e.originalEvent.clientY, fieldId, name);
+}
+
+function bindFieldLayerHandlers() {
+    if (!map) return;
+    map.off("click", "fields-fill", onFieldLayerClick);
+    map.off("contextmenu", "fields-fill", onFieldLayerContextMenu);
+    map.off("click", onMapClickClearFieldSelection);
+    map.on("click", "fields-fill", onFieldLayerClick);
+    map.on("contextmenu", "fields-fill", onFieldLayerContextMenu);
+    map.on("click", onMapClickClearFieldSelection);
+}
+
+function populateCropFilterOptions(geojson) {
+    const select = document.getElementById("filter-crop-type");
+    if (!select || !geojson?.features) return;
+
+    const cropNames = new Set();
+    geojson.features.forEach(feature => {
+        parseFieldHistory(feature.properties?.history).forEach(record => {
+            if (record?.cropName) cropNames.add(record.cropName);
+        });
+    });
+
+    const current = select.value;
+    select.innerHTML = `<option value="all">Все культуры</option>`;
+    [...cropNames].sort((a, b) => a.localeCompare(b, "ru")).forEach(name => {
+        const opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        select.appendChild(opt);
+    });
+    if ([...select.options].some(o => o.value === current)) {
+        select.value = current;
+    }
+}
+
+function updateTopAnalyticsStats(geojson) {
+    if (!geojson?.features?.length) return;
+    const totalFields = geojson.features.length;
+    const totalArea = geojson.features.reduce((sum, feature) => {
+        const area = parseFloat(feature?.properties?.area);
+        return sum + (Number.isFinite(area) ? area : 0);
+    }, 0);
+    document.querySelectorAll(".stat-card").forEach(card => {
+        const label = card.querySelector(".stat-label")?.textContent?.trim();
+        const valueEl = card.querySelector(".stat-value");
+        if (!label || !valueEl) return;
+        if (label === "Общая площадь земель") {
+            valueEl.innerHTML = `${totalArea.toFixed(1)}<span class="stat-unit">га</span>`;
+        } else if (label === "Всего полей") {
+            valueEl.textContent = String(totalFields);
+        }
+    });
+}
+
+// =====================================================
 // ЗАГРУЗКА И ОТОБРАЖЕНИЕ ПОЛЕЙ
 // =====================================================
 async function loadFields() {
@@ -253,9 +859,12 @@ async function loadFields() {
 
         const data = await response.json();
         loadedFieldsGeoJson = data;
+        updateTopAnalyticsStats(data);
 
         populateFilterFieldsList(data);
-        populateNdviFieldsChecklist(data); 
+        populateCropFilterOptions(data);
+        populateNdviFieldsChecklist(data);
+        ensureFieldContextMenu();
 
         if (!map) return;
 
@@ -266,7 +875,7 @@ async function loadFields() {
         map.addSource("fields-source", {
             type: "geojson",
             data: data,
-            generateId: true
+            promoteId: "id"
         });
 
         map.addLayer({
@@ -274,8 +883,18 @@ async function loadFields() {
             type: "fill",
             source: "fields-source",
             paint: {
-                "fill-color": "#10b981",
-                "fill-opacity": 0.22
+                "fill-color": [
+                    "case",
+                    ["boolean", ["feature-state", "highlight"], false], "#22c55e",
+                    ["boolean", ["feature-state", "ndviSelected"], false], "#3b82f6",
+                    "#10b981"
+                ],
+                "fill-opacity": [
+                    "case",
+                    ["boolean", ["feature-state", "highlight"], false], 0.38,
+                    ["boolean", ["feature-state", "ndviSelected"], false], 0.38,
+                    0.22
+                ]
             }
         });
 
@@ -284,75 +903,28 @@ async function loadFields() {
             type: "line",
             source: "fields-source",
             paint: {
-                "line-color": "#10b981",
-                "line-width": 2
+                "line-color": [
+                    "case",
+                    ["boolean", ["feature-state", "highlight"], false], "#16a34a",
+                    ["boolean", ["feature-state", "ndviSelected"], false], "#1d4ed8",
+                    "#10b981"
+                ],
+                "line-width": [
+                    "case",
+                    ["boolean", ["feature-state", "highlight"], false], 3,
+                    ["boolean", ["feature-state", "ndviSelected"], false], 3,
+                    2
+                ]
             }
         });
 
-        // Навешиваем клик на полигоны полей для показа сводки и истории сева (Новое!)
-        map.on("click", "fields-fill", (e) => {
-            if (isMeasuring || !e.features || e.features.length === 0) return;
+        bindFieldLayerHandlers();
 
-            const properties = e.features[0].properties;
-            const name = properties.name || "Без названия";
-            const area = properties.area ? Number(properties.area).toFixed(1) : "Н/Д";
+        ndviSelectedFieldIds.forEach(id => setFieldFeatureState(id, { ndviSelected: true }));
+        if (highlightedFieldId != null) {
+            setFieldFeatureState(highlightedFieldId, { highlight: true });
+        }
 
-            // Безопасно разбираем динамическую историю поля (так как MapLibre сжимает массивы в JSON-строки)
-            let historyRecords = [];
-            if (properties.history) {
-                if (typeof properties.history === "string") {
-                    try {
-                        historyRecords = JSON.parse(properties.history);
-                    } catch (err) {
-                        historyRecords = [];
-                    }
-                } else if (Array.isArray(properties.history)) {
-                    historyRecords = properties.history;
-                }
-            }
-
-            // Формируем блок с последней актуальной записью севооборота
-            let latestRecordHtml = "";
-            if (historyRecords && historyRecords.length > 0) {
-                // Сортируем записи по году (самый свежий сезон вверху)
-                historyRecords.sort((a, b) => (b.cropYear || 0) - (a.cropYear || 0));
-                const latest = historyRecords[0];
-                
-                const crop = latest.cropName || "Неизвестно";
-                const year = latest.cropYear || "—";
-                const sowing = latest.sowingDate || "—";
-                const yieldVal = latest.actualYield ? `${latest.actualYield} ц/га` : "—";
-                
-                latestRecordHtml = `
-                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; line-height: 1.4;">
-                        <strong style="display:block; color: #0f172a; margin-bottom: 2px;">Последний сев (${year} г.):</strong>
-                        <span style="display:block; color: #475569;">🌾 Культура: <strong style="color: #0f172a;">${crop}</strong></span>
-                        <span style="display:block; color: #475569;">📅 Дата посева: ${sowing}</span>
-                        <span style="display:block; color: #475569;">🚜 Урожайность: ${yieldVal}</span>
-                    </div>
-                `;
-            } else {
-                latestRecordHtml = `
-                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center;">
-                        История севооборота отсутствует
-                    </div>
-                `;
-            }
-
-            // Выводим попап на карте
-            new maplibregl.Popup()
-                .setLngLat(e.lngLat)
-                .setHTML(`
-                    <div style="font-family:'Inter', sans-serif; padding:4px; min-width:180px;">
-                        <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">🌿 ${name}</strong>
-                        <span style="font-size:12px; color:#64748b; font-weight:500;">Площадь: ${area} га</span>
-                        ${latestRecordHtml}
-                    </div>
-                `)
-                .addTo(map);
-        });
-
-        // Смена курсора
         map.on("mouseenter", "fields-fill", () => { if (!isMeasuring) map.getCanvas().style.cursor = "pointer"; });
         map.on("mouseleave", "fields-fill", () => { if (!isMeasuring) map.getCanvas().style.cursor = ""; });
 
@@ -391,30 +963,135 @@ function populateNdviFieldsChecklist(geojson) {
 
     if (!geojson || !geojson.features) return;
 
-    const fillContainer = (containerEl, cssClass) => {
+    ensureNdviFieldsToolbar();
+    ensureCropFieldsToolbar();
+    ensureSoilFieldsToolbar();
+
+    const fillContainer = (containerEl, cssClass, checkedByDefault) => {
         if (!containerEl) return;
         containerEl.innerHTML = "";
         geojson.features.forEach(feature => {
             const props = feature.properties || {};
             const id = props.id || props.fieldId || feature.id;
             const name = props.name || props.fieldName || `Поле #${id}`;
+            const isNdvi = cssClass === "ndvi-filter-checkbox";
+            const isChecked = isNdvi
+                ? ndviSelectedFieldIds.has(String(id))
+                : checkedByDefault;
+            const checkedAttr = isChecked ? ' checked="checked"' : "";
 
             const label = document.createElement("label");
             label.className = "filter-checkbox-row";
-            label.innerHTML = `
-                <input type="checkbox" value="${id}" class="${cssClass}" checked="checked" />
-                <span>${name}</span>
-            `;
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.value = String(id);
+            input.className = cssClass;
+            if (isChecked) input.checked = true;
+            const span = document.createElement("span");
+            span.textContent = name;
+            label.appendChild(input);
+            label.appendChild(span);
+
+            if (isNdvi) {
+                input.addEventListener("change", () => {
+                    setNdviFieldSelected(id, input.checked);
+                });
+            }
+
             containerEl.appendChild(label);
         });
     };
 
-    fillContainer(ndviBox, "ndvi-filter-checkbox");
-    fillContainer(cropBox, "crop-filter-checkbox");
-    fillContainer(soilBox, "soil-filter-checkbox");
+    fillContainer(ndviBox, "ndvi-filter-checkbox", false);
+    fillContainer(cropBox, "crop-filter-checkbox", true);
+    fillContainer(soilBox, "soil-filter-checkbox", true);
 
     initCropRecalculation();
     initSoilRecalculation();
+    updateCropDistributionChart();
+}
+
+const CROP_CHART_COLORS = [
+    "#10b981", "#f59e0b", "#f97316", "#3b82f6",
+    "#8b5cf6", "#ec4899", "#14b8a6", "#6366f1"
+];
+
+function getLatestCropRecord(history) {
+    const records = parseFieldHistory(history);
+    if (!records.length) return null;
+    return records.reduce((best, record) => {
+        const year = record?.cropYear || 0;
+        const bestYear = best?.cropYear || 0;
+        return year >= bestYear ? record : best;
+    }, records[0]);
+}
+
+function updateCropDistributionChart() {
+    const donut = document.querySelector(".donut-chart");
+    const legend = document.getElementById("crop-legend") || document.querySelector(".crop-legend");
+    if (!donut || !legend) return;
+
+    if (!loadedFieldsGeoJson?.features?.length) {
+        donut.style.background = "#e2e8f0";
+        donut.setAttribute("data-tip", "Нет данных");
+        legend.innerHTML = `<p class="muted font-sm m-0">Загрузите поля на карту</p>`;
+        return;
+    }
+
+    const selectedIds = new Set(
+        Array.from(document.querySelectorAll(".crop-filter-checkbox:checked")).map(cb => String(cb.value))
+    );
+
+    const byCrop = new Map();
+    loadedFieldsGeoJson.features.forEach(feature => {
+        const fieldId = getFeatureFieldId(feature);
+        if (selectedIds.size > 0 && !selectedIds.has(fieldId)) return;
+
+        const props = feature.properties || {};
+        const area = parseFloat(props.area) || 0;
+        if (area <= 0) return;
+
+        const latest = getLatestCropRecord(props.history);
+        const cropName = (latest?.cropName || "Не указана").trim();
+        byCrop.set(cropName, (byCrop.get(cropName) || 0) + area);
+    });
+
+    const entries = [...byCrop.entries()].sort((a, b) => b[1] - a[1]);
+    const total = entries.reduce((sum, [, area]) => sum + area, 0);
+
+    if (total <= 0) {
+        donut.style.background = "#e2e8f0";
+        donut.setAttribute("data-tip", "Нет данных по выбранным полям");
+        legend.innerHTML = `<p class="muted font-sm m-0">Нет культур в истории посевов выбранных полей</p>`;
+        return;
+    }
+
+    const gradientParts = [];
+    const tipParts = [];
+    let offset = 0;
+
+    legend.innerHTML = "";
+    entries.forEach(([name, area], index) => {
+        const pct = (area / total) * 100;
+        const color = CROP_CHART_COLORS[index % CROP_CHART_COLORS.length];
+        gradientParts.push(`${color} ${offset}% ${offset + pct}%`);
+        offset += pct;
+        tipParts.push(`${name}: ${area.toFixed(1)} га`);
+
+        const row = document.createElement("div");
+        row.className = "crop-row";
+        row.innerHTML = `
+            <div class="crop-left">
+                <span class="crop-dot" style="background:${color}" data-tip="${name}"></span>
+                <span>${name}</span>
+            </div>
+            <span class="crop-val">${area.toFixed(1)} га</span>
+        `;
+        legend.appendChild(row);
+    });
+
+    donut.style.background = `conic-gradient(${gradientParts.join(", ")})`;
+    donut.setAttribute("data-tip", tipParts.join(" | "));
 }
 
 // =====================================================
@@ -552,12 +1229,17 @@ function haversineDistance(coords1, coords2) {
 // =====================================================
 // ФИЛЬТРАЦИЯ С СЕЛЕКТОРОМ ПОЛЕЙ
 // =====================================================
+// =====================================================
+// ПАНЕЛЬ ФИЛЬТРОВ: ПРИМЕНЕНИЕ/СБРОС
+// =====================================================
 function setupFilterControls() {
     const btnApply = document.getElementById("btn-apply-filters");
     const btnReset = document.getElementById("btn-reset-filters");
 
     btnApply?.addEventListener("click", () => {
         const minArea = parseFloat(document.getElementById("filter-area-min")?.value) || 0;
+        const maxAreaRaw = document.getElementById("filter-area-max")?.value;
+        const maxArea = maxAreaRaw !== "" && maxAreaRaw != null ? parseFloat(maxAreaRaw) : Infinity;
         const cropType = document.getElementById("filter-crop-type")?.value || "all";
         const ndviMin = parseFloat(document.getElementById("filter-ndvi-min")?.value) || 0.0;
         const ndviMax = parseFloat(document.getElementById("filter-ndvi-max")?.value) || 1.0;
@@ -572,19 +1254,20 @@ function setupFilterControls() {
             const props = feature.properties || {};
             const id = props.id || props.fieldId || feature.id;
             const area = parseFloat(props.area) || 0;
-            const history = props.history || [];
-            const ndviVal = props.ndvi_mean || 0.65; 
+            const history = parseFieldHistory(props.history);
+            const ndviVal = props.ndvi_mean || 0.65;
 
             let fieldMatch = true;
             if (selectedFieldIds.length > 0) {
                 fieldMatch = selectedFieldIds.includes(String(id));
             }
 
-            const areaOk = area >= minArea;
+            const areaOk = area >= minArea && area <= maxArea;
 
             let cropOk = true;
             if (cropType !== "all") {
-                cropOk = history.some(record => record.cropName === cropType);
+                const latestCrop = getLatestCropRecord(history);
+                cropOk = latestCrop?.cropName === cropType;
             }
 
             const ndviOk = ndviVal >= ndviMin && ndviVal <= ndviMax;
@@ -605,16 +1288,22 @@ function setupFilterControls() {
             type: "FeatureCollection",
             features: filteredFeatures
         });
+        ndviSelectedFieldIds.forEach(id => setFieldFeatureState(id, { ndviSelected: true }));
+        if (highlightedFieldId != null) {
+            setFieldFeatureState(highlightedFieldId, { highlight: true });
+        }
     });
 
     btnReset?.addEventListener("click", () => {
         const areaMinEl = document.getElementById("filter-area-min");
+        const areaMaxEl = document.getElementById("filter-area-max");
         const cropTypeEl = document.getElementById("filter-crop-type");
         const ndviMinEl = document.getElementById("filter-ndvi-min");
         const ndviMaxEl = document.getElementById("filter-ndvi-max");
         const statusLevelEl = document.getElementById("filter-status-level");
 
         if (areaMinEl) areaMinEl.value = "";
+        if (areaMaxEl) areaMaxEl.value = "";
         if (cropTypeEl) cropTypeEl.value = "all";
         if (ndviMinEl) ndviMinEl.value = "";
         if (ndviMaxEl) ndviMaxEl.value = "";
@@ -627,11 +1316,15 @@ function setupFilterControls() {
         if (loadedFieldsGeoJson && map) {
             map.getSource("fields-source")?.setData(loadedFieldsGeoJson);
         }
+        applyFieldHighlight(null);
     });
 }
 
 // =====================================================
 // ИМПОРТ ДАННЫХ
+// =====================================================
+// =====================================================
+// МОДАЛКА ИМПОРТА ФАЙЛОВ
 // =====================================================
 function setupImportModal() {
     const modal = document.getElementById("import-modal");
@@ -701,6 +1394,9 @@ function setupImportModal() {
 // =====================================================
 // НАВИГАЦИЯ И БОКОВЫЕ ПАНЕЛИ
 // =====================================================
+// =====================================================
+// БОКОВЫЕ ПАНЕЛИ И КНОПКИ ИНТЕРФЕЙСА
+// =====================================================
 function setupSidebarAndPanels() {
     document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
         document.getElementById("sidebar")?.classList.toggle("open");
@@ -708,11 +1404,16 @@ function setupSidebarAndPanels() {
 
     document.getElementById("analytics-toggle")?.addEventListener("click", () => {
         document.getElementById("analytics-panel")?.classList.add("open");
+        syncFieldHistoryPanelLayout();
     });
 
     document.getElementById("analytics-close")?.addEventListener("click", () => {
         document.getElementById("analytics-panel")?.classList.remove("open");
+        syncFieldHistoryPanelLayout();
     });
+
+    setupAnalyticsPanelResize();
+    ensureFieldHistoryPanel();
 
     document.getElementById("layers-toggle")?.addEventListener("click", () => {
         document.getElementById("layers-panel")?.classList.toggle("open");
@@ -736,6 +1437,88 @@ function setupSidebarAndPanels() {
     });
 }
 
+let analyticsResizeBound = false;
+
+function setupAnalyticsPanelResize() {
+    const panel = document.getElementById("analytics-panel");
+    const handle = document.getElementById("analytics-resize-handle");
+    if (!panel || !handle || analyticsResizeBound) return;
+    analyticsResizeBound = true;
+
+    const applySavedWidth = () => {
+        const savedWidth = Number(localStorage.getItem(ANALYTICS_PANEL_WIDTH_KEY));
+        if (savedWidth >= ANALYTICS_PANEL_MIN_WIDTH) {
+            panel.style.setProperty("--analytics-panel-width", `${savedWidth}px`);
+            panel.style.width = `${savedWidth}px`;
+        }
+    };
+    applySavedWidth();
+
+    const maxWidth = () =>
+        Math.min(window.innerWidth * ANALYTICS_PANEL_MAX_WIDTH_RATIO, 720);
+
+    const applyWidth = (clientX) => {
+        const width = Math.min(maxWidth(), Math.max(ANALYTICS_PANEL_MIN_WIDTH, window.innerWidth - clientX));
+        panel.style.setProperty("--analytics-panel-width", `${width}px`);
+        panel.style.width = `${width}px`;
+        syncFieldHistoryPanelLayout();
+        return width;
+    };
+
+    let dragging = false;
+    let activePointerId = null;
+
+    const stopDrag = (e) => {
+        if (!dragging) return;
+        if (e?.pointerId != null && activePointerId != null && e.pointerId !== activePointerId) return;
+        dragging = false;
+        activePointerId = null;
+        handle.classList.remove("is-dragging");
+        panel.classList.remove("is-resizing");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        try {
+            if (e?.pointerId != null) handle.releasePointerCapture(e.pointerId);
+        } catch (_) { /* already released */ }
+        const width = panel.getBoundingClientRect().width;
+        localStorage.setItem(ANALYTICS_PANEL_WIDTH_KEY, String(Math.round(width)));
+        syncFieldHistoryPanelLayout();
+    };
+
+    const onPointerMove = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        applyWidth(e.clientX);
+    };
+
+    const startDrag = (e) => {
+        if (!panel.classList.contains("open")) return;
+        if (e.button !== undefined && e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        dragging = true;
+        activePointerId = e.pointerId;
+        handle.classList.add("is-dragging");
+        panel.classList.add("is-resizing");
+        document.body.style.cursor = "ew-resize";
+        document.body.style.userSelect = "none";
+        try {
+            handle.setPointerCapture(e.pointerId);
+        } catch (_) { /* fallback to document listeners */ }
+        applyWidth(e.clientX);
+    };
+
+    handle.addEventListener("pointerdown", startDrag);
+    handle.addEventListener("pointermove", onPointerMove);
+    handle.addEventListener("pointerup", stopDrag);
+    handle.addEventListener("pointercancel", stopDrag);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", stopDrag);
+}
+
+// =====================================================
+// ПАНЕЛЬ СЛОЕВ КАРТЫ
+// =====================================================
 function setupLayerControls() {
     document.querySelectorAll('input[name="base-layer"]').forEach(input => {
         input.addEventListener("change", (e) => {
@@ -753,31 +1536,115 @@ function setupLayerControls() {
         if (map.getLayer("fields-fill")) map.setLayoutProperty("fields-fill", "visibility", visibility);
         if (map.getLayer("fields-outline")) map.setLayoutProperty("fields-outline", "visibility", visibility);
     });
+
+    const ndviLayersToolbar = document.getElementById("ndvi-layers-toolbar");
+    ndviLayersToolbar?.querySelector("[data-action='all']")?.addEventListener("click", () => {
+        document.querySelectorAll("#dynamic-layers-container input[type='checkbox']").forEach(cb => {
+            cb.checked = true;
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+    });
+    ndviLayersToolbar?.querySelector("[data-action='none']")?.addEventListener("click", () => {
+        document.querySelectorAll("#dynamic-layers-container input[type='checkbox']").forEach(cb => {
+            cb.checked = false;
+            cb.dispatchEvent(new Event("change", { bubbles: true }));
+        });
+    });
 }
 
 // =====================================================
 // ПЕРЕКЛЮЧЕНИЕ ТАБОВ АНАЛИТИКИ (ВЕГЕТАЦИЯ / ПОГОДА)
 // =====================================================
+// =====================================================
+// ВКЛАДКИ АНАЛИТИКИ (ВЕГЕТАЦИЯ / ПОГОДА)
+// =====================================================
 function setupAnalyticsTabs() {
-    const tabs = document.querySelectorAll(".analytics-tab");
-    tabs.forEach(tab => {
-        tab.addEventListener("click", () => {
-            tabs.forEach(t => t.classList.remove("active"));
-            tab.classList.add("active");
+    const tabs = Array.from(document.querySelectorAll(".analytics-tab"));
+    const vegContent = document.getElementById("tab-content-veg");
+    const weatherContent = document.getElementById("tab-content-weather");
+    if (!tabs.length || !vegContent || !weatherContent) return;
 
-            const activeTabName = tab.getAttribute("data-tab");
-            const vegContent = document.getElementById("tab-content-veg");
-            const weatherContent = document.getElementById("tab-content-weather");
+    // Защита от некорректной HTML-вложенности: weather не должен быть дочерним блоком veg.
+    if (vegContent.contains(weatherContent)) {
+        vegContent.insertAdjacentElement("afterend", weatherContent);
+        console.warn("[AnalyticsTabs] fixed malformed DOM: moved weather tab out of veg container");
+    }
 
-            if (activeTabName === "veg") {
-                vegContent?.classList.remove("tab-content-hidden");
-                weatherContent?.classList.add("tab-content-hidden");
-            } else if (activeTabName === "weather") {
-                vegContent?.classList.add("tab-content-hidden");
-                weatherContent?.classList.remove("tab-content-hidden");
-            }
+    // Централизованный переключатель вкладок, чтобы состояние не "расходилось" между кнопками и контентом.
+    const activateTab = (tabName) => {
+        const name = tabName === "weather" ? "weather" : "veg";
+        tabs.forEach(t => t.classList.toggle("active", t.getAttribute("data-tab") === name));
+        vegContent.classList.toggle("tab-content-hidden", name !== "veg");
+        weatherContent.classList.toggle("tab-content-hidden", name !== "weather");
+        // Жёстко фиксируем видимость через inline-стиль, чтобы избежать конфликтов каскада CSS.
+        vegContent.style.display = name === "veg" ? "block" : "none";
+        weatherContent.style.display = name === "weather" ? "block" : "none";
+        console.info("[AnalyticsTabs] activate", {
+            tab: name,
+            weatherChildren: weatherContent.children.length,
+            weatherHtmlLength: weatherContent.innerHTML?.length || 0,
+            weatherDisplay: getComputedStyle(weatherContent).display
         });
+        if (name === "weather" && document.getElementById("analytics-panel")?.classList.contains("open")) {
+            requestAnimationFrame(() => ensureWeatherTabHasVisibleContent(weatherContent));
+        }
+    };
+
+    tabs.forEach(tab => {
+        tab.addEventListener("click", () => activateTab(tab.getAttribute("data-tab")));
     });
+
+    const initiallyActive = tabs.find(t => t.classList.contains("active"))?.getAttribute("data-tab");
+    activateTab(initiallyActive || "veg");
+
+    // Дополнительный страховочный обработчик: если вкладки перерисовались, клик всё равно переключит контент.
+    document.addEventListener("click", (e) => {
+        const tab = e.target.closest(".analytics-tab");
+        if (!tab) return;
+        activateTab(tab.getAttribute("data-tab"));
+    });
+}
+
+function ensureWeatherTabFallbackContent() {
+    const weather = document.getElementById("tab-content-weather");
+    if (!weather) return;
+    const hasRealContent = weather.querySelector(".analytics-card, .stats-grid, .stat-card");
+    if (hasRealContent) return;
+    weather.innerHTML = `
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-left">
+                    <div class="stat-label">Температура</div>
+                    <div class="stat-value">+22<span class="stat-unit">°C</span></div>
+                </div>
+                <div class="stat-right icon-orange">☀️</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-left">
+                    <div class="stat-label">Влажность</div>
+                    <div class="stat-value">48<span class="stat-unit">%</span></div>
+                </div>
+                <div class="stat-right icon-blue">💧</div>
+            </div>
+        </div>
+        <div class="analytics-card">
+            <div class="card-title-mini">Осадки за 7 дней (заглушка)</div>
+            <p class="muted font-sm m-0">Данные погоды временно недоступны. Отображается демо-блок.</p>
+        </div>
+    `;
+}
+
+function ensureWeatherTabHasVisibleContent(weatherContent) {
+    const hasVisibleBlocks = weatherContent.querySelector(".stats-grid, .analytics-card, .stat-card");
+    const hasVisibleHeight = weatherContent.getBoundingClientRect().height > 24;
+    if (hasVisibleBlocks && hasVisibleHeight) {
+        return;
+    }
+    console.warn("[AnalyticsTabs] weather tab has no visible content, applying fallback", {
+        hasVisibleBlocks: !!hasVisibleBlocks,
+        height: weatherContent.getBoundingClientRect().height
+    });
+    ensureWeatherTabFallbackContent();
 }
 
 // =====================================================
@@ -793,27 +1660,36 @@ function setupNdviCalculation() {
         const selectedFieldIds = Array.from(checkedBoxes).map(cb => String(cb.value));
 
         const startDate = startDateInput?.value;
-        const endDate = endDateInput?.value;
+        const endDate = endDateInput?.value || startDate;
 
         if (selectedFieldIds.length === 0) {
-            alert("Пожалуйста, сначала выберите поля галочками.");
+            alert("Пожалуйста, отметьте галочками поля для расчёта NDVI.");
             return;
         }
         if (!startDate) {
             alert("Пожалуйста, выберите 'Дату начала'.");
             return;
         }
+        if (endDate && startDate > endDate) {
+            alert("Дата начала не может быть больше даты конца.");
+            return;
+        }
 
         const trendTitle = document.getElementById("trend-title-ref");
-        if (trendTitle) trendTitle.textContent = "⌛ Загрузка снимков...";
+        if (trendTitle) {
+            trendTitle.innerHTML = `<span class="loading-inline"><span class="loading-spinner"></span>Загрузка снимков...</span>`;
+        }
 
         // 1. ПОЛНОСТЬЮ ОЧИЩАЕМ КАРТУ И МЕНЮ ОТ СТАРЫХ РАСТРОВ
         clearNdviLayers();
 
         try {
+            // =====================================================
+            // NDVI: ЗАГРУЗКА ТАЙЛОВ ЧЕРЕЗ JAVA API
+            // =====================================================
             // 2. ЗАГРУЖАЕМ РАСТРЫ ДЛЯ КАЖДОГО ВЫБРАННОГО ПОЛЯ
             const tilePromises = selectedFieldIds.map(fieldId => {
-                return fetch(pythonApiPath(`/get_ndvi_tiles_for_field?field_id=${fieldId}&date=${startDate}`), pythonFetchOpts)
+                return fetch(apiPath(`/get_ndvi_tiles_for_field?field_id=${fieldId}&date=${startDate}`), fetchOpts)
                     .then(res => {
                         if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
                         return res.json();
@@ -834,7 +1710,7 @@ function setupNdviCalculation() {
                     const layerId = `ndvi-layer-${result.fieldId}`;
 
                     // Добавляем на карту
-                    addNdviLayer(result.data.url, layerId);
+                    addNdviLayer(result.data.url, layerId, result.fieldId);
 
                     // Добавляем переключатель в панель слоев
                     addLayerToggleToMenu(layerId, result.fieldId, result.data.actual_date);
@@ -846,17 +1722,26 @@ function setupNdviCalculation() {
 
             if (trendTitle) trendTitle.textContent = `Отображено растров: ${loadedCount} из ${selectedFieldIds.length}`;
 
+            // =====================================================
+            // NDVI: ЗАГРУЗКА ТРЕНДА ЧЕРЕЗ JAVA API
+            // =====================================================
             // 4. ГРАФИК ТРЕНДА (Вторичная задача)
             try {
-                if (endDate) {
-                    const trendResponse = await fetch(pythonApiPath(`/get_ndvi_trend?${selectedFieldIds.map(id => `field_id=${id}`).join('&')}&start_date=${startDate}&end_date=${endDate}`), pythonFetchOpts);
-                    if (trendResponse.ok) {
-                        const trendData = await trendResponse.json();
-                        updateNdviChart(trendData.labels, trendData.data);
-                        const avgNdviEl = document.getElementById("calc-avg-ndvi");
-                        if (avgNdviEl && trendData.data.length > 0) {
-                            avgNdviEl.textContent = (trendData.data.reduce((a, b) => a + b, 0) / trendData.data.length).toFixed(2);
-                        }
+                const trendQuery = `${selectedFieldIds.map(id => `field_id=${id}`).join('&')}&start_date=${startDate}&end_date=${endDate}&warmup=true`;
+                const trendResponse = await fetch(apiPath(`/get_ndvi_trend?${trendQuery}`), fetchOpts);
+                if (trendResponse.ok) {
+                    const trendData = await trendResponse.json();
+                    updateNdviChart(trendData.labels, trendData.data);
+                    const avgNdviEl = document.getElementById("calc-avg-ndvi");
+                    if (avgNdviEl && trendData.data.length > 0) {
+                        avgNdviEl.textContent = (trendData.data.reduce((a, b) => a + b, 0) / trendData.data.length).toFixed(2);
+                    } else if (avgNdviEl) {
+                        avgNdviEl.textContent = "—";
+                    }
+                    if (trendTitle) {
+                        trendTitle.textContent = trendData.data.length > 0
+                            ? `NDVI: ${startDate} - ${endDate} (${trendData.data.length} т.)`
+                            : "Нет NDVI-аналитики за выбранный период";
                     }
                 }
             } catch (trendErr) {
@@ -871,55 +1756,188 @@ function setupNdviCalculation() {
     });
 }
 
+// =====================================================
+// КАРТОЧКА АНАЛИТИКИ УКЛОНОВ
+// =====================================================
+function setupSlopeAnalyticsCard() {
+    const vegTab = document.getElementById("tab-content-veg");
+    if (!vegTab || document.getElementById("slope-card")) return;
+    const card = document.createElement("div");
+    card.className = "analytics-card";
+    card.id = "slope-card";
+    card.innerHTML = `
+        <div class="card-title-mini">Уклоны (Slope)</div>
+        <div class="filter-group">
+            <div class="filter-label">Используются выбранные поля и период из блока NDVI</div>
+            <button type="button" class="filter-btn primary w-100-pct" id="btn-calculate-slope">Рассчитать уклоны</button>
+        </div>
+        <div class="chart-container mt-2" id="slope-chart-box">
+            <svg viewBox="0 0 320 160" width="100%" height="150" class="chart-svg-visible">
+                <line x1="30" y1="10" x2="30" y2="130" stroke="#e2e8f0" stroke-width="1.5"></line>
+                <line x1="30" y1="130" x2="310" y2="130" stroke="#94a3b8" stroke-width="1.5"></line>
+                <path id="slope-path-line" d="" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round"></path>
+            </svg>
+        </div>
+        <p class="muted font-sm m-0" id="slope-status-text">Нет данных</p>
+    `;
+    // Карточка "Уклоны" должна стоять сразу под NDVI-трендом.
+    const ndviTrendCard = document.getElementById("trend-chart-box")?.closest(".analytics-card");
+    if (ndviTrendCard?.parentElement) {
+        ndviTrendCard.insertAdjacentElement("afterend", card);
+    } else {
+        vegTab.appendChild(card);
+    }
+}
+
+// =====================================================
+// РАСЧЕТ И ЗАГРУЗКА ТРЕНДА УКЛОНОВ
+// =====================================================
+function setupSlopeCalculation() {
+    const btn = document.getElementById("btn-calculate-slope");
+    btn?.addEventListener("click", async () => {
+        const selectedFieldIds = Array.from(document.querySelectorAll(".ndvi-filter-checkbox:checked")).map(cb => String(cb.value));
+        const startDate = document.getElementById("ndvi-start-date")?.value;
+        const endDate = document.getElementById("ndvi-end-date")?.value || startDate;
+        const status = document.getElementById("slope-status-text");
+        if (selectedFieldIds.length === 0) {
+            if (status) status.textContent = "Выберите поля для расчёта уклонов";
+            return;
+        }
+        if (!startDate) {
+            if (status) status.textContent = "Укажите дату начала";
+            return;
+        }
+        if (status) {
+            status.innerHTML = `<span class="loading-inline"><span class="loading-spinner"></span>Загрузка данных уклонов...</span>`;
+        }
+        // =====================================================
+        // SLOPE: ПРОГРЕВ ТАЙЛОВ ЧЕРЕЗ JAVA API
+        // =====================================================
+        // Прогрев slope-тайлов по выбранным полям перед запросом тренда (аналог потока NDVI).
+        const tilePromises = selectedFieldIds.map(fieldId =>
+            fetch(apiPath(`/get_slope_tiles_for_field?field_id=${fieldId}&date=${startDate}`), fetchOpts).catch(() => null)
+        );
+        await Promise.all(tilePromises);
+        // =====================================================
+        // SLOPE: ТРЕНД ЧЕРЕЗ JAVA API
+        // =====================================================
+        const trendQuery = `${selectedFieldIds.map(id => `field_id=${id}`).join("&")}&start_date=${startDate}&end_date=${endDate}`;
+        const trendResponse = await fetch(apiPath(`/get_slope_trend?${trendQuery}`), fetchOpts);
+        if (!trendResponse.ok) {
+            let message = "Не удалось получить тренд уклонов";
+            try {
+                const err = await trendResponse.json();
+                message = err?.error || err?.detail || message;
+            } catch (_) { /* ignore parse errors */ }
+            if (status) status.textContent = message;
+            return;
+        }
+        const trendData = await trendResponse.json();
+        updateSlopeChart(trendData.labels || [], trendData.data || []);
+        if (status) status.textContent = trendData.data?.length ? `Точек тренда: ${trendData.data.length}` : "Нет данных за период";
+    });
+}
+
+// =====================================================
+// ОТРИСОВКА ГРАФИКА УКЛОНОВ
+// =====================================================
+function updateSlopeChart(labels, data) {
+    const svgContainer = document.querySelector("#slope-chart-box svg");
+    const pathEl = document.getElementById("slope-path-line");
+    if (!svgContainer || !pathEl) return;
+    document.querySelectorAll(".dynamic-slope-node").forEach(el => el.remove());
+    if (!data || data.length === 0) {
+        pathEl.setAttribute("d", "");
+        return;
+    }
+    // Масштаб Y строим от фактического диапазона уклонов в ответе.
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const span = Math.max(0.1, max - min);
+    const scaleY = (val) => 20 + (110 - ((val - min) / span) * 100);
+    const stepX = (320 - 60) / Math.max(1, data.length - 1);
+    let d = "";
+    data.forEach((val, i) => {
+        const x = 30 + i * stepX;
+        const y = scaleY(val);
+        d += (i === 0 ? `M ${x},${y}` : ` L ${x},${y}`);
+        const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        circle.setAttribute("cx", x);
+        circle.setAttribute("cy", y);
+        circle.setAttribute("r", 4.5);
+        circle.setAttribute("fill", "#2563eb");
+        circle.setAttribute("class", "dynamic-slope-node");
+        circle.setAttribute("data-tip", `${labels[i] || i + 1}: ${Number(val).toFixed(2)}°`);
+        svgContainer.appendChild(circle);
+    });
+    pathEl.setAttribute("d", d);
+}
+
+function setupAnalyticsCardCollapsing() {
+    // Унифицированное сворачивание карточек аналитики через заголовок.
+    document.querySelectorAll(".analytics-card").forEach((card, idx) => {
+        if (card.dataset.collapseBound === "1") return;
+        const title = card.querySelector(".card-title-mini");
+        if (!title) return;
+        card.dataset.collapseBound = "1";
+        const titleText = title.textContent || `Блок ${idx + 1}`;
+        title.innerHTML = `
+            <button type="button" class="analytics-collapse-btn" aria-expanded="true">
+                <span>${titleText}</span><span class="analytics-collapse-icon">▾</span>
+            </button>
+        `;
+        const btn = title.querySelector(".analytics-collapse-btn");
+        btn?.addEventListener("click", () => {
+            const collapsed = card.classList.toggle("analytics-card-collapsed");
+            btn.setAttribute("aria-expanded", String(!collapsed));
+        });
+    });
+}
+
 // Функция добавления слоя на карту
-function addNdviLayer(tileUrlTemplate, layerId) {
+// =====================================================
+// NDVI: ДОБАВЛЕНИЕ РАСТРОВОГО СЛОЯ НА КАРТУ
+// =====================================================
+function addNdviLayer(tileUrlTemplate, layerId, fieldId) {
     if (!map) return;
     if (map.getLayer(layerId)) {
         map.removeLayer(layerId);
         if (map.getSource(layerId)) map.removeSource(layerId);
     }
-    map.addSource(layerId, { type: "raster", tiles: [tileUrlTemplate], tileSize: 256 });
+    const source = { type: "raster", tiles: [tileUrlTemplate], tileSize: 256 };
+    const bounds = getFieldBoundsById(fieldId);
+    if (bounds) {
+        source.bounds = bounds;
+    }
+    map.addSource(layerId, source);
     map.addLayer({
         id: layerId, type: "raster", source: layerId,
         paint: { "raster-opacity": 0.8 }
     }, "fields-outline");
+    setNdviLegendVisible(true);
 }
 
 // НОВАЯ ФУНКЦИЯ: Добавляет чекбокс в панель слоев
+// =====================================================
+// NDVI: ПЕРЕКЛЮЧАТЕЛЬ СЛОЯ В ПАНЕЛИ
+// =====================================================
 function addLayerToggleToMenu(layerId, fieldId, dateStr) {
-    const layersPanel = document.getElementById("layers-panel");
-    if (!layersPanel) return;
-
-    // Ищем или создаем контейнер специально для динамических слоев внутри панели
     let dynamicContainer = document.getElementById("dynamic-layers-container");
-    if (!dynamicContainer) {
-        dynamicContainer = document.createElement("div");
-        dynamicContainer.id = "dynamic-layers-container";
-        dynamicContainer.style.marginTop = "15px";
-        dynamicContainer.style.borderTop = "1px solid #e2e8f0";
-        dynamicContainer.style.paddingTop = "10px";
-        layersPanel.appendChild(dynamicContainer);
-    }
+    if (!dynamicContainer) return;
 
     // Создаем элемент списка (чекбокс + текст)
     const labelRow = document.createElement("label");
     labelRow.className = "filter-checkbox-row dynamic-ndvi-toggle"; // Используем ваши классы стилей
     labelRow.id = `toggle-${layerId}`;
-    labelRow.style.display = "flex";
-    labelRow.style.alignItems = "center";
-    labelRow.style.marginBottom = "8px";
-    labelRow.style.cursor = "pointer";
 
     // Сам чекбокс
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.checked = true; // Слой включен по умолчанию
-    checkbox.style.marginRight = "8px";
 
     // Название слоя
     const span = document.createElement("span");
     span.textContent = `NDVI Поле #${fieldId} (${dateStr})`;
-    span.style.fontSize = "13px";
 
     // Вешаем событие: при клике включаем/выключаем слой на карте
     checkbox.addEventListener("change", (e) => {
@@ -935,6 +1953,9 @@ function addLayerToggleToMenu(layerId, fieldId, dateStr) {
 }
 
 // НОВАЯ ФУНКЦИЯ: Очищает слои с карты и удаляет их из меню
+// =====================================================
+// NDVI: ОЧИСТКА СЛОЕВ И ПЕРЕКЛЮЧАТЕЛЕЙ
+// =====================================================
 function clearNdviLayers() {
     activeNdviLayerIds.forEach(layerId => {
         // Удаляем с карты
@@ -947,6 +1968,37 @@ function clearNdviLayers() {
         if (toggleEl) toggleEl.remove();
     });
     activeNdviLayerIds = []; // Обнуляем список
+    setNdviLegendVisible(false);
+}
+
+// =====================================================
+// NDVI: ЛЕГЕНДА НА КАРТЕ
+// =====================================================
+function ensureNdviLegend() {
+    if (document.getElementById("ndvi-map-legend")) return;
+    // Легенда добавляется в DOM один раз и просто показывается/скрывается при работе со слоями NDVI.
+    const legend = document.createElement("div");
+    legend.id = "ndvi-map-legend";
+    legend.className = "ndvi-map-legend ndvi-map-legend-hidden";
+    legend.innerHTML = `
+        <div class="ndvi-map-legend-title">Легенда NDVI</div>
+        <div class="ndvi-map-legend-bar"></div>
+        <div class="ndvi-map-legend-labels">
+            <span>0.0</span>
+            <span>0.2</span>
+            <span>0.4</span>
+            <span>0.6</span>
+            <span>0.8+</span>
+        </div>
+        <div class="ndvi-map-legend-hint">Красный: низкая вегетация, зеленый: высокая</div>
+    `;
+    document.body.appendChild(legend);
+}
+
+function setNdviLegendVisible(visible) {
+    const legend = document.getElementById("ndvi-map-legend");
+    if (!legend) return;
+    legend.classList.toggle("ndvi-map-legend-hidden", !visible);
 }
 
 // =====================================================
@@ -970,16 +2022,17 @@ function updateNdviChart(labels, data) {
     // Если данных нет — очищаем линию
     if (!data || data.length === 0) {
         pathEl.setAttribute("d", "");
+        renderNdviXAxisLabels(svgContainer, []);
         return;
     }
 
     // 3. Настройки геометрии графика
-    const chartWidth = 350;  // Примерная ширина SVG viewBox
+    const xMin = 30;
+    const xMax = 310;
+    const chartWidth = 320;  // Соответствует viewBox 0 0 320 160
     const chartHeight = 150; // Примерная высота SVG viewBox
     const paddingTop = 20;
     const paddingBottom = 20;
-    const paddingLeft = 30;
-    const paddingRight = 30;
 
     // Функция перевода значения NDVI (0...1) в Y координату на экране (SVG)
     const scaleY = (val) => {
@@ -990,13 +2043,13 @@ function updateNdviChart(labels, data) {
         return paddingTop + innerHeight - (safeVal * innerHeight);
     };
 
-    // Шаг по оси X
-    const stepX = (chartWidth - paddingLeft - paddingRight) / Math.max(1, (data.length - 1));
+    // Шаг по оси X. Для одной точки ставим её по центру графика.
+    const stepX = (xMax - xMin) / Math.max(1, (data.length - 1));
 
     // 4. Рисуем новую линию (d атрибут)
     let d = "";
     data.forEach((val, i) => {
-        const x = paddingLeft + (i * stepX);
+        const x = data.length === 1 ? (xMin + xMax) / 2 : (xMin + (i * stepX));
         const y = scaleY(val);
 
         if (i === 0) {
@@ -1027,38 +2080,40 @@ function updateNdviChart(labels, data) {
 
     // Применяем линию к SVG
     pathEl.setAttribute("d", d);
+    renderNdviXAxisLabels(svgContainer, labels || []);
+}
+
+function renderNdviXAxisLabels(svgContainer, labels) {
+    document.querySelectorAll(".dynamic-x-label").forEach(el => el.remove());
+    // Убираем исходные статические подписи месяцев из шаблона.
+    svgContainer.querySelectorAll('text[y="146"]:not(.dynamic-x-label)').forEach(el => el.remove());
+    if (!labels || labels.length === 0) return;
+    const xMin = 30;
+    const xMax = 310;
+    const stepX = (xMax - xMin) / Math.max(1, labels.length - 1);
+    labels.forEach((label, i) => {
+        const x = labels.length === 1 ? (xMin + xMax) / 2 : (xMin + i * stepX);
+        const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        text.setAttribute("x", x);
+        text.setAttribute("y", "146");
+        text.setAttribute("font-size", "9");
+        text.setAttribute("fill", "#94a3b8");
+        text.setAttribute("text-anchor", "middle");
+        text.setAttribute("class", "dynamic-x-label");
+        text.textContent = label;
+        svgContainer.appendChild(text);
+    });
 }
 
 // =====================================================
-// ДИНАМИЧЕСКИЙ ПЕРЕРАСЧЕТ КУЛЬТУР НА БАЗЕ ПОЛЕЙ (UX/UI)
+// ДИНАМИЧЕСКОЕ РАСПРЕДЕЛЕНИЕ КУЛЬТУР ПО ВЫБРАННЫМ ПОЛЯМ
 // =====================================================
+let cropRecalcBound = false;
+
 function initCropRecalculation() {
-    document.getElementById("crop-fields-checklist")?.addEventListener("change", () => {
-        const checkedCount = document.querySelectorAll(".crop-filter-checkbox:checked").length;
-        const baseFactor = checkedCount > 0 ? checkedCount : 1;
-
-        // Эмулируем распределение культур в зависимости от набора полей
-        const psh = (138.2 * (baseFactor * 0.4 + 0.6)).toFixed(1);
-        const kuk = (189.3 * (1.5 / (baseFactor * 0.5 + 0.5))).toFixed(1);
-        const soya = (152.4 * (baseFactor * 0.3 + 0.7)).toFixed(1);
-
-        // Обновляем легенду
-        const vals = document.querySelectorAll(".crop-val");
-        if (vals[0]) vals[0].textContent = `${psh} га`;
-        if (vals[1]) vals[1].textContent = `${kuk} га`;
-        if (vals[2]) vals[2].textContent = `${soya} га`;
-
-        // Обновляем спектральные срезы conic-gradient у пончика
-        const total = parseFloat(psh) + parseFloat(kuk) + parseFloat(soya);
-        const pshPct = Math.round((psh / total) * 100);
-        const kukPct = Math.round((kuk / total) * 100);
-        
-        const donut = document.querySelector(".donut-chart");
-        if (donut) {
-            donut.style.background = `conic-gradient(#10b981 0% ${pshPct}%, #f59e0b ${pshPct}% ${pshPct + kukPct}%, #f97316 ${pshPct + kukPct}% 100%)`;
-            donut.setAttribute("data-tip", `Пшеница: ${psh} га | Кукуруза: ${kuk} га | Соя: ${soya} га`);
-        }
-    });
+    if (cropRecalcBound) return;
+    cropRecalcBound = true;
+    document.getElementById("crop-fields-checklist")?.addEventListener("change", updateCropDistributionChart);
 }
 
 // =====================================================

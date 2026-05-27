@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class GeoFieldsUserDetailsService implements UserDetailsService {
 
+    /** Загрузка пользователя по логину для Spring Security (вход в систему). */
     private static final String LOAD_USER_SQL = """
             SELECT id, login, password_hash, organization_id, role, is_active,
                    COALESCE(NULLIF(TRIM(registration_status), ''), 'APPROVED') AS registration_status,

@@ -1,0 +1,196 @@
+openapi: 3.0.3
+info:
+  title: Python Slope API (Agro Service Pro)
+  description: |
+    Спецификация Python-сервиса уклонов (Slope).
+
+    Используется Java backend как outbound API для:
+    - получения URL шаблона slope-тайлов по полю;
+    - получения slope-тренда по группе полей;
+    - выдачи slope PNG-тайлов для карты.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8001
+    description: Локальный Python-сервис аналитики
+
+tags:
+  - name: Slope
+    description: Уклоны по полям
+  - name: SlopeTiles
+    description: Выдача PNG slope-тайлов
+
+paths:
+  /get_slope_tiles_for_field:
+    get:
+      tags: [Slope]
+      summary: Получить URL slope-тайлов для поля
+      operationId: getSlopeTilesForField
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "12"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: URL тайлов и фактическая дата
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlopeTilesForFieldResponse"
+        "404":
+          description: Нет доступных данных
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Ошибка расчёта/БД
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /get_slope_trend:
+    get:
+      tags: [Slope]
+      summary: Получить slope-тренд для группы полей
+      operationId: getSlopeTrend
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          description: Идентификаторы полей (повторяющийся query-параметр)
+          schema:
+            type: array
+            items:
+              type: integer
+          style: form
+          explode: true
+          example: [12, 15]
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-04-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-09-01"
+      responses:
+        "200":
+          description: Данные для построения slope-графика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlopeTrendResponse"
+        "500":
+          description: Ошибка расчёта/БД
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /slope/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [SlopeTiles]
+      summary: PNG slope-тайл
+      operationId: getSlopePngTile
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "12"
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+        - name: scene_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "SLOPE"
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 10
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 615
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 342
+      responses:
+        "200":
+          description: PNG изображение тайла
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл
+        "404":
+          description: Данные не найдены
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    SlopeTilesForFieldResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL шаблон тайлов `{z}/{x}/{y}`
+          example: "http://localhost:8001/slope/tiles/12/2024-06-15/SLOPE/{z}/{x}/{y}.png"
+        actual_date:
+          type: string
+          format: date
+          description: Фактическая дата данных (может отличаться от запрошенной)
+          example: "2024-06-15"
+
+    SlopeTrendResponse:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+          description: Подписи (месяцы)
+          example: ["Apr", "May", "Jun"]
+        data:
+          type: array
+          items: { type: number, format: double }
+          description: Значения уклона по точкам
+          example: [3.2, 3.6, 3.4]
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Нет доступных данных уклонов"
+

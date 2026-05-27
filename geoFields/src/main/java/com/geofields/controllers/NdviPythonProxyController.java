@@ -1,0 +1,152 @@
+package com.geofields.controllers;
+
+import com.geofields.service.NdviPythonClient;
+import com.geofields.service.NdviTileFetchService;
+import com.geofields.service.RequestValidationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientResponseException;
+
+import java.util.List;
+import java.util.Map;
+
+/** Прокси NDVI: браузер → Java → Python (см. OpenAPIspec.yaml, тег PythonNDVI). */
+@RestController
+public class NdviPythonProxyController {
+
+    private static final Logger log = LoggerFactory.getLogger(NdviPythonProxyController.class);
+
+    private final RequestValidationService validationService;
+    private final NdviPythonClient ndviPythonClient;
+    private final NdviTileFetchService ndviTileFetchService;
+
+    public NdviPythonProxyController(
+            RequestValidationService validationService,
+            NdviPythonClient ndviPythonClient,
+            NdviTileFetchService ndviTileFetchService) {
+        this.validationService = validationService;
+        this.ndviPythonClient = ndviPythonClient;
+        this.ndviTileFetchService = ndviTileFetchService;
+    }
+
+    @GetMapping("/get_ndvi_tiles_for_field")
+    public ResponseEntity<?> getNdviTilesForField(
+            @RequestParam String field_id,
+            @RequestParam String date) {
+        RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
+        if (org.isError()) return castError(org.errorResponse());
+        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
+        if (field.isError()) return castError(field.errorResponse());
+        RequestValidationService.ValidationResult<Void> fieldAccess =
+                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
+        if (fieldAccess.isError()) return castError(fieldAccess.errorResponse());
+
+        try {
+            log.info("Getting NDVI tiles for field {} on date {}", field.value(), date.trim());
+            return ResponseEntity.ok(ndviPythonClient.getTilesForField(field.value(), date.trim()));
+        } catch (RestClientResponseException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ndviPythonClient.upstreamDetail(ex)));
+        }
+    }
+
+    @GetMapping("/get_ndvi_trend")
+    public ResponseEntity<?> getNdviTrend(
+            @RequestParam("field_id") List<String> rawFieldIds,
+            @RequestParam String start_date,
+            @RequestParam String end_date,
+            @RequestParam(name = "warmup", defaultValue = "true") boolean warmup) {
+        RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
+        if (org.isError()) return castError(org.errorResponse());
+        RequestValidationService.ValidationResult<List<Long>> fields = validationService.parseFieldIds(rawFieldIds);
+        if (fields.isError()) return castError(fields.errorResponse());
+        List<Long> fieldIds = fields.value();
+        for (Long fieldId : fieldIds) {
+            RequestValidationService.ValidationResult<Void> fieldAccess =
+                    validationService.ensureFieldBelongsToOrganization(fieldId, org.value(), true);
+            if (fieldAccess.isError()) return castError(fieldAccess.errorResponse());
+        }
+        RequestValidationService.ValidationResult<RequestValidationService.DateRange> range =
+                validationService.parseDateRange(start_date, end_date);
+        if (range.isError()) return castError(range.errorResponse());
+
+        try {
+            if (warmup) {
+                ndviPythonClient.warmupTrendAnalytics(
+                        fieldIds,
+                        range.value().startDate().toString(),
+                        range.value().endDate().toString());
+            }
+            return ResponseEntity.ok(
+                    ndviPythonClient.getTrend(
+                            fieldIds,
+                            range.value().startDate().toString(),
+                            range.value().endDate().toString()));
+        } catch (RestClientResponseException ex) {
+            return ResponseEntity.status(ex.getStatusCode())
+                    .body(Map.of("error", ndviPythonClient.upstreamDetail(ex)));
+        }
+    }
+
+    @GetMapping("/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png")
+    public ResponseEntity<byte[]> getNdviTile(
+            @PathVariable String field_id,
+            @PathVariable String date,
+            @PathVariable String scene_id,
+            @PathVariable int z,
+            @PathVariable int x,
+            @PathVariable int y) {
+        RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
+        if (org.isError()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
+        if (field.isError()) return ResponseEntity.badRequest().build();
+        RequestValidationService.ValidationResult<Void> fieldAccess =
+                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
+        if (fieldAccess.isError()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+
+        try {
+            NdviTileFetchService.FetchResult result = ndviTileFetchService.fetchTile(
+                    field_id, date, scene_id, z, x, y);
+
+            if (result.noContent()) {
+                return ResponseEntity.noContent().build();
+            }
+
+            if (result.cacheHit()) {
+                return ResponseEntity.ok()
+                        .contentType(MediaType.IMAGE_PNG)
+                        .cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePublic())
+                        .header("X-Ndvi-Cache", "HIT-" + result.source().name())
+                        .body(result.png());
+            }
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_PNG)
+                    .cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(1)).cachePublic())
+                    .header("X-Ndvi-Cache", "MISS")
+                    .body(result.png());
+        } catch (RestClientResponseException ex) {
+            log.warn("NDVI tile upstream HTTP error for field {} z/x/y={}/{}/{}: {}",
+                    field_id, z, x, y, ndviPythonClient.upstreamDetail(ex));
+            return ResponseEntity.status(ex.getStatusCode()).build();
+        } catch (ResourceAccessException ex) {
+            log.error("NDVI tile upstream unreachable for field {} z/x/y={}/{}/{}: {}",
+                    field_id, z, x, y, ex.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> ResponseEntity<T> castError(ResponseEntity<?> errorResponse) {
+        return (ResponseEntity<T>) errorResponse;
+    }
+}

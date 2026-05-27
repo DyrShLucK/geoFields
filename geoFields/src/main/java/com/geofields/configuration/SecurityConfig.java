@@ -29,7 +29,13 @@ public class SecurityConfig {
         return "/get_fields".equals(uri)
                 || "/get_ndvi_value".equals(uri)
                 || "/get_ndvi_by_id".equals(uri)
-                || "/get_all_ndvi_tile".equals(uri);
+                || "/get_all_ndvi_tile".equals(uri)
+                || "/get_ndvi_tiles_for_field".equals(uri)
+                || "/get_ndvi_trend".equals(uri)
+                || "/get_slope_tiles_for_field".equals(uri)
+                || "/get_slope_trend".equals(uri)
+                || uri.startsWith("/slope/tiles/")
+                || uri.startsWith("/tiles/");
     };
 
     @Bean
@@ -43,9 +49,9 @@ public class SecurityConfig {
                         new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
                         JSON_FETCH_ENDPOINTS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/css/**", "/js/**", "/favicon.ico").permitAll()
+                        .requestMatchers("/css/**", "/js/**", "/images/**").permitAll()
                         .requestMatchers("/error").permitAll()
-                        .requestMatchers("/login", "/register").permitAll()
+                        .requestMatchers("/login", "/register", "/about").permitAll()
                         .requestMatchers(
                                 "/org/admin",
                                 "/org/admin/**",

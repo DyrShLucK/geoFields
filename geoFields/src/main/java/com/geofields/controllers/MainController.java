@@ -31,6 +31,11 @@ public class MainController {
         return "login";
     }
 
+    @GetMapping("/about")
+    public String aboutPage() {
+        return "about";
+    }
+
     @GetMapping("/register")
     public String registerPage(
             @RequestParam(name = "ref", required = false) String ref,

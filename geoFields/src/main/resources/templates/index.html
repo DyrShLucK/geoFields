@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Агромониторинг — Карта</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
     <!-- MapLibre GL CSS -->
     <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet" />
@@ -111,6 +112,15 @@
             <input type="checkbox" id="toggle-fields" checked="checked" />
             <span>Контуры полей</span>
         </label>
+
+        <div id="ndvi-layers-block" class="ndvi-layers-block is-empty">
+            <div class="group-title ndvi-layers-group-title">Слои NDVI</div>
+            <div class="ndvi-fields-toolbar" id="ndvi-layers-toolbar">
+                <button type="button" class="ndvi-list-btn" data-action="all">Выбрать все</button>
+                <button type="button" class="ndvi-list-btn" data-action="none">Убрать все</button>
+            </div>
+            <div class="layers-ndvi-list" id="dynamic-layers-container"></div>
+        </div>
     </div>
 
     <!-- Расширенная панель фильтров -->
@@ -126,18 +136,17 @@
         </div>
 
         <div class="filter-group">
-            <div class="filter-label">Площадь поля, га (от)</div>
-            <input type="number" id="filter-area-min" class="filter-input" placeholder="Минимум" min="0" />
+            <div class="filter-label">Площадь поля, га</div>
+            <div class="flex-row-gap-8">
+                <input type="number" id="filter-area-min" class="filter-input" placeholder="Мин." min="0" />
+                <input type="number" id="filter-area-max" class="filter-input" placeholder="Макс." min="0" />
+            </div>
         </div>
 
         <div class="filter-group">
             <div class="filter-label">Возделываемая культура</div>
             <select id="filter-crop-type" class="filter-select">
                 <option value="all">Все культуры</option>
-                <option value="Пшеница">Пшеница</option>
-                <option value="Подсолнечник">Подсолнечник</option>
-                <option value="Рапс">Рапс</option>
-                <option value="Ячмень">Ячмень</option>
             </select>
         </div>
 
@@ -193,12 +202,15 @@
 
     <!-- Боковая панель аналитики -->
     <div class="analytics-panel" id="analytics-panel">
+        <div class="analytics-resize-handle" id="analytics-resize-handle" title="Потяните влево, чтобы расширить панель"></div>
         <div class="analytics-header">
             <span>Панель аналитики</span>
             <button class="analytics-close" id="analytics-close">×</button>
         </div>
 
         <!-- Сетка показателей по макету -->
+
+        <div class="analytics-panel-scroll">
         <div class="stats-grid">
             <div class="stat-card full-width">
                 <div class="stat-left">
@@ -314,35 +326,14 @@
                         <p class="muted font-sm m-0">Загрузка полей...</p>
                     </div>
                 </div>
-                <div class="donut-wrap">
-                    <div class="donut-chart" data-tip="Пшеница: 138.2 ha | Кукуруза: 189.3 ha | Соя: 152.4 ha"></div>
+                                <div class="donut-wrap">
+                    <div class="donut-chart" data-tip=""></div>
                 </div>
-                <div class="crop-legend">
-                    <div class="crop-row">
-                        <div class="crop-left">
-                            <span class="crop-dot green" data-tip="Пшеница: Яровая и озимая"></span>
-                            <span>Пшеница</span>
-                        </div>
-                        <span class="crop-val">138.2 ha</span>
-                    </div>
-                    <div class="crop-row">
-                        <div class="crop-left">
-                            <span class="crop-dot yellow" data-tip="Кукуруза: На силос и зерно"></span>
-                            <span>Кукуруза</span>
-                        </div>
-                        <span class="crop-val">189.3 ha</span>
-                    </div>
-                    <div class="crop-row">
-                        <div class="crop-left">
-                            <span class="crop-dot orange" data-tip="Соя: Раннеспелые сорта"></span>
-                            <span>Соя</span>
-                        </div>
-                        <span class="crop-val">152.4 ha</span>
-                    </div>
+                <div class="crop-legend" id="crop-legend">
+                    <p class="muted font-sm m-0">Загрузка...</p>
                 </div>
-            </div>
 
-            <!-- Показатели здоровья почвы с мультиселектом полей -->
+<!-- Показатели здоровья почвы с мультиселектом полей -->
             <div class="analytics-card">
                 <div class="card-title-mini">Показатели здоровья почвы</div>
                 <div class="filter-group">
@@ -496,6 +487,7 @@
                     </svg>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 

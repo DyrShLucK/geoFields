@@ -1,0 +1,187 @@
+openapi: 3.0.3
+info:
+  title: GeoFields Shapefile Import API
+  description: Импорт полей из архива с shapefile.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Локальный сервер GeoFields
+
+tags:
+  - name: FieldsImport
+    description: Импорт полей из shapefile
+
+paths:
+  /api/fields/import:
+    post:
+      tags: [FieldsImport]
+      summary: Импорт полей из архива
+      description: |
+        Принимает ZIP-архив с shapefile.
+        Возвращает GeoJSON для добавления множества полей с историями посевов и справочник культур.
+      operationId: importFieldsFromShapefile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: ZIP-архив с shapefile
+      responses:
+        "200":
+          description: Поля, истории и справочник культур
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShapefileImportResponse"
+        "400":
+          description: Некорректный архив или данные
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    ShapefileImportResponse:
+      type: object
+      required: [fields, crops]
+      properties:
+        fields:
+          $ref: "#/components/schemas/FieldFeatureCollection"
+        crops:
+          type: array
+          items:
+            $ref: "#/components/schemas/CropItem"
+
+    FieldFeatureCollection:
+      type: object
+      required: [type, features]
+      properties:
+        type:
+          type: string
+          example: FeatureCollection
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldFeature"
+
+    FieldFeature:
+      type: object
+      required: [type, properties, geometry]
+      properties:
+        type:
+          type: string
+          example: Feature
+        properties:
+          $ref: "#/components/schemas/FieldProperties"
+        geometry:
+          $ref: "#/components/schemas/GeoJSONGeometry"
+
+    FieldProperties:
+      type: object
+      required: [name, area, active, history]
+      properties:
+        name:
+          type: string
+        area:
+          type: number
+          format: double
+        active:
+          type: boolean
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/FieldHistoryItem"
+
+    FieldHistoryItem:
+      type: object
+      properties:
+        cropName:
+          type: string
+          nullable: true
+        sowingDate:
+          type: string
+          nullable: true
+        harvestDate:
+          type: string
+          nullable: true
+        sownAreaHa:
+          type: number
+          nullable: true
+        harvestAreaHa:
+          type: number
+          nullable: true
+        actualYield:
+          type: number
+          nullable: true
+        totalYield:
+          type: number
+          nullable: true
+        plannedYield:
+          type: number
+          nullable: true
+        forecastedYield:
+          type: number
+          nullable: true
+        sourceData:
+          type: string
+          nullable: true
+        sowingDetails:
+          type: string
+          nullable: true
+        cropYear:
+          type: integer
+          nullable: true
+        analyticsDate:
+          type: string
+          nullable: true
+        ndviUrl:
+          type: string
+          nullable: true
+        ndviCreatedAt:
+          type: string
+          nullable: true
+
+    CropItem:
+      type: object
+      required: [cropName]
+      properties:
+        cropName:
+          type: string
+
+    GeoJSONGeometry:
+      type: object
+      required: [type, coordinates]
+      properties:
+        type:
+          type: string
+          enum: [Point, LineString, Polygon, MultiPolygon]
+          example: Polygon
+        coordinates: {}
+      example:
+        type: Polygon
+        coordinates:
+          - - [51.54, 46.03]
+            - [51.55, 46.03]
+            - [51.55, 46.04]
+            - [51.54, 46.04]
+            - [51.54, 46.03]
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string

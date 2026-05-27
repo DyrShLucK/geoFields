@@ -1,314 +1,250 @@
 openapi: 3.0.3
 info:
-  title: GeoFields → провайдер NDVI (исходящие запросы)
+  title: Python NDVI API (Agro Service Pro)
   description: |
-    Контракт **клиента** GeoFields: JSON, который бэкенд отправляет **стороннему** сервису NDVI,
-    когда в БД нет данных на дату (`field_analytics` / `ndvi_data`).
+    Спецификация Python-сервиса расчёта и выдачи NDVI-тайлов.
 
-    Реализация: `NdviExternalFetchPlaceholder` (сейчас сериализует тело в лог; позже — HTTP).
+    Используется Java backend (`NdviPythonClient`) как outbound API для:
+    - получения URL шаблона тайлов NDVI для выбранных полей;
+    - получения тренда NDVI за период;
+    - выдачи PNG-тайлов для подложки карты (MapLibre GL).
 
-    Поле **`fields_geojson`** — тот же формат, что ответ **`GET /get_fields`**: GeoJSON FeatureCollection
-    с геометрией полигона(ов) и `properties` (id, name, area, history), без изменений относительно HTML/карты.
-
-    Файл лежит рядом со статикой: `/ndvi-outbound-api.yaml`.
-
-    Дата снимка: `record_date` — `YYYY-MM-DD`. Точка: WGS84 (`latitude`, `longitude`).
-  version: 0.2.0
+    Базовый URL в docker-compose: `http://localhost:8001` (порт 8001 проброшен на контейнер `python-processor`).
+  version: 1.0.0
 
 servers:
-  - url: https://ndvi-provider.example.com
-    description: Хост провайдера (заменить в конфигурации)
+  - url: http://localhost:8001
+    description: Локальный Python-сервис NDVI
 
 tags:
-  - name: NDVI Outbound
-    description: Исходящие запросы GeoFields
-
-security:
-  - bearerAuth: []
+  - name: NDVI
+    description: Расчёт NDVI и выдача URL тайлов / тренда
+  - name: Tiles
+    description: Выдача PNG-тайлов NDVI
 
 paths:
-  /v1/ndvi/tiles/field:
-    post:
-      tags: [NDVI Outbound]
-      summary: Заказ NDVI-тайлов для одного поля
-      description: Сценарий отсутствия NDVI в БД при `/get_ndvi_by_id`.
-      operationId: ndviOutboundTileForField
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NdviTileFieldRequest"
-            example:
-              organization_id: 3
-              field_id: 12
-              record_date: "2024-06-15"
-              fields_geojson:
-                type: FeatureCollection
-                features:
-                  - type: Feature
-                    id: 12
-                    properties:
-                      id: 12
-                      name: "Участок Север"
-                      area: 120.5
-                      history: []
-                    geometry:
-                      type: Polygon
-                      coordinates: [[[38.9, 45.0], [39.0, 45.0], [39.0, 45.1], [38.9, 45.1], [38.9, 45.0]]]
-      responses:
-        "202":
-          description: Задача принята
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NdviJobAccepted"
-        "200":
-          description: Синхронный URL тайлов
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NdviTileUrlPayload"
-        "400":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorBody"
-        "401":
-          description: Не авторизован
-
-  /v1/ndvi/tiles/fields:
-    post:
-      tags: [NDVI Outbound]
-      summary: Заказ NDVI-тайлов для набора полей
+  /get_ndvi_tiles_for_field:
+    get:
+      tags: [NDVI]
+      summary: Получить URL тайлов NDVI для поля
       description: |
-        Сценарий `/get_all_ndvi_tile`. В `fields_geojson` — только запрошенные поля (подмножество `/get_fields`).
-        Пустой `features` допустим, если список id пуст или геометрии нет.
-      operationId: ndviOutboundTileForFields
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NdviTileFieldsRequest"
+        Возвращает URL-шаблон тайлов для поля на указанную дату.
+        Если расчёта нет — инициирует вычисление, сохраняет результат и возвращает URL.
+      operationId: getNdviTilesForField
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "12"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-15"
       responses:
-        "202":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NdviJobAccepted"
         "200":
+          description: URL тайлов и фактическая дата снимка
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NdviTileUrlPayload"
-        "400":
+                $ref: "#/components/schemas/NdviTilesForFieldResponse"
+        "404":
+          description: Нет доступных спутниковых данных (сцены не найдены)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorBody"
-        "401":
-          description: Не авторизован
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Ошибка расчёта/БД
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
-  /v1/ndvi/point-value:
-    post:
-      tags: [NDVI Outbound]
-      summary: Заказ значения NDVI в точке
+  /get_ndvi_trend:
+    get:
+      tags: [NDVI]
+      summary: Тренд NDVI для группы полей за период
       description: |
-        Сценарий `/get_ndvi_value`. Если точка попала в поле — в `fields_geojson` одна фича этого поля;
-        иначе `features: []`, `field_id` в корне — `null`.
-      operationId: ndviOutboundPointValue
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/NdviPointValueRequest"
+        Java может предварительно вызвать `/get_ndvi_tiles_for_field` по месяцам
+        (warmup-оркестрация на своей стороне), затем вызвать этот endpoint.
+      operationId: getNdviTrend
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          description: Идентификаторы полей (повторяющийся query-параметр)
+          schema:
+            type: array
+            items:
+              type: integer
+          style: form
+          explode: true
+          example: [12, 15]
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-04-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-09-01"
       responses:
-        "202":
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/NdviJobAccepted"
         "200":
+          description: Данные для построения графика
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/NdviScalarPayload"
-        "400":
+                $ref: "#/components/schemas/NdviTrendResponse"
+        "500":
+          description: Ошибка расчёта/БД
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorBody"
-        "401":
-          description: Не авторизован
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /get_ndvi_by_id:
+    get:
+      tags: [NDVI]
+      summary: Получить URL тайлов NDVI (альтернативный эндпоинт)
+      description: |
+        Аналогично `get_ndvi_tiles_for_field`, используется как совместимость.
+      operationId: getNdviById
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "12"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: URL тайлов и фактическая дата снимка (может отсутствовать)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviByIdResponse"
+        "404":
+          description: Нет доступных спутниковых данных
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Ошибка расчёта/БД
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [Tiles]
+      summary: PNG-тайл NDVI для подложки карты
+      description: |
+        Возвращает PNG-тайл для заданного поля, даты, сцены и XYZ координат тайла.
+        Используется картографическим компонентом (MapLibre GL) как raster tiles.
+      operationId: getNdviPngTile
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "12"
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+        - name: scene_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "S2A_20240615"
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 10
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 615
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 342
+      responses:
+        "200":
+          description: PNG изображение тайла
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
 
 components:
-  securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-
   schemas:
-    GeoJsonFeatureCollection:
+    NdviTilesForFieldResponse:
       type: object
-      description: Как в ответе GET /get_fields (type FeatureCollection).
-      required:
-        - type
-        - features
       properties:
-        type:
+        url:
           type: string
-          enum: [FeatureCollection]
-        features:
-          type: array
-          items:
-            $ref: "#/components/schemas/GeoJsonFeature"
-
-    GeoJsonFeature:
-      type: object
-      required:
-        - type
-        - geometry
-        - properties
-      properties:
-        type:
-          type: string
-          enum: [Feature]
-        id:
-          type: integer
-          format: int64
-          description: id поля в БД (дублирует properties.id)
-        geometry:
-          $ref: "#/components/schemas/GeoJsonGeometry"
-        properties:
-          type: object
-          description: |
-            Поля как у FieldFeaturePropertiesDto — id, name, area, history (массив записей посевов / аналитики).
-          additionalProperties: true
-
-    GeoJsonGeometry:
-      type: object
-      required:
-        - type
-        - coordinates
-      properties:
-        type:
-          type: string
-          enum: [Polygon, MultiPolygon, Point, MultiPoint, LineString, MultiLineString]
-        coordinates:
-          description: Координаты в формате GeoJSON (вложенные массивы чисел).
-          type: array
-          items: {}
-
-    NdviTileFieldRequest:
-      type: object
-      required:
-        - organization_id
-        - field_id
-        - record_date
-        - fields_geojson
-      properties:
-        organization_id:
-          type: integer
-          format: int64
-        field_id:
-          type: integer
-          format: int64
-        record_date:
+          description: URL шаблон тайлов `{z}/{x}/{y}`
+          example: "http://localhost:8001/tiles/12/2024-06-15/S2A_20240615/{z}/{x}/{y}.png"
+        actual_date:
           type: string
           format: date
-        fields_geojson:
-          $ref: "#/components/schemas/GeoJsonFeatureCollection"
+          description: Фактическая дата снимка (может отличаться от запрошенной)
+          example: "2024-06-15"
 
-    NdviTileFieldsRequest:
+    NdviByIdResponse:
       type: object
-      required:
-        - organization_id
-        - field_ids
-        - record_date
-        - fields_geojson
       properties:
-        organization_id:
-          type: integer
-          format: int64
-        field_ids:
-          type: array
-          items:
-            type: integer
-            format: int64
-        record_date:
+        url:
+          type: string
+          description: URL шаблон тайлов `{z}/{x}/{y}`
+        actual_date:
           type: string
           format: date
-        fields_geojson:
-          $ref: "#/components/schemas/GeoJsonFeatureCollection"
-
-    NdviPointValueRequest:
-      type: object
-      required:
-        - organization_id
-        - latitude
-        - longitude
-        - record_date
-        - fields_geojson
-      properties:
-        organization_id:
-          type: integer
-          format: int64
-        latitude:
-          type: number
-          format: double
-        longitude:
-          type: number
-          format: double
-        record_date:
-          type: string
-          format: date
-        field_id:
-          type: integer
-          format: int64
           nullable: true
-        fields_geojson:
-          $ref: "#/components/schemas/GeoJsonFeatureCollection"
 
-    NdviJobAccepted:
-      type: object
-      required:
-        - job_id
-      properties:
-        job_id:
-          type: string
-          format: uuid
-        status:
-          type: string
-          example: accepted
-
-    NdviTileUrlPayload:
-      type: object
-      required:
-        - tile_url
-      properties:
-        tile_url:
-          type: string
-
-    NdviScalarPayload:
-      type: object
-      required:
-        - value
-      properties:
-        value:
-          type: number
-          format: double
-
-    ErrorBody:
+    NdviTrendResponse:
       type: object
       properties:
-        error:
+        labels:
+          type: array
+          items: { type: string }
+          description: Подписи (месяцы) для графика
+          example: ["Apr", "May", "Jun"]
+        data:
+          type: array
+          items: { type: number, format: double }
+          description: Значения NDVI по точкам графика
+          example: [0.41, 0.55, 0.62]
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
           type: string
-        code:
-          type: string
+          example: "Нет доступных спутниковых данных"

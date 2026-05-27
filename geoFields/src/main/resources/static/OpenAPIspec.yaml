@@ -22,6 +22,8 @@ tags:
     description: Поля и история в формате GeoJSON
   - name: NDVI
     description: Заглушки тайлов и значения NDVI
+  - name: Slope
+    description: Уклоны по полям (структура ответов как у NDVI)
   - name: OrgManager
     description: Менеджер организации (роли ORG_MANAGER, ORG_ADMIN)
   - name: OrgAdmin
@@ -30,8 +32,148 @@ tags:
     description: Эндпоинты агронома (история культур и intake нового поля)
   - name: Session
     description: Сессия и контекст пользователя для SPA-частей UI
+  - name: PythonNDVI
+    description: |
+      Внешний Python-сервис NDVI (FastAPI), который вызывается Java-бэкендом.
+      Фронтенд работает с Java-эндпоинтами (`/get_ndvi_tiles_for_field`, `/get_ndvi_trend`, `/tiles/...`).
 
 paths:
+  /python/get_ndvi_tiles_for_field:
+    get:
+      tags: [PythonNDVI]
+      summary: (Frontend → Python) URL тайлов NDVI для поля
+      description: |
+        Этот запрос выполняется **из браузера** (см. `static/js/app.js`) напрямую в Python API:
+        `GET http://localhost:8001/get_ndvi_tiles_for_field?field_id=...&date=YYYY-MM-DD`.
+      servers:
+        - url: http://localhost:8001
+          description: Python NDVI API
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema: { type: string }
+          example: "12"
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: URL тайлов и фактическая дата снимка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythonNdviTilesForFieldResponse"
+        "404":
+          description: Нет доступных спутниковых данных
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythonErrorResponse"
+        "500":
+          description: Ошибка Python-сервиса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythonErrorResponse"
+
+  /python/get_ndvi_trend:
+    get:
+      tags: [PythonNDVI]
+      summary: (Frontend → Python) Тренд NDVI по группе полей
+      description: |
+        Этот запрос выполняется **из браузера** напрямую в Python API:
+        `GET http://localhost:8001/get_ndvi_trend?field_id=1&field_id=2&start_date=...&end_date=...`.
+      servers:
+        - url: http://localhost:8001
+          description: Python NDVI API
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          description: Идентификаторы полей (повторяющийся query-параметр)
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+          example: [12, 15]
+        - name: start_date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-04-01"
+        - name: end_date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-09-01"
+      responses:
+        "200":
+          description: Данные для построения графика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythonNdviTrendResponse"
+        "500":
+          description: Ошибка Python-сервиса
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PythonErrorResponse"
+
+  /python/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [PythonNDVI]
+      summary: (MapLibre → Python) PNG-тайл NDVI
+      description: |
+        Тайловый URL используется картой как raster tiles (запросы формирует MapLibre GL).
+        Реальный эндпоинт: `GET http://localhost:8001/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png`.
+      servers:
+        - url: http://localhost:8001
+          description: Python NDVI API
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "12"
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+        - name: scene_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "S2A_20240615"
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 10
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 615
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+          example: 342
+      responses:
+        "200":
+          description: PNG изображение тайла
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+
   /api/session/context:
     get:
       tags: [Session]
@@ -132,6 +274,294 @@ paths:
                 $ref: "#/components/schemas/SimpleError"
         "401":
           description: Нет сессии или не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+
+  /get_ndvi_tiles_for_field:
+    get:
+      tags: [NDVI]
+      summary: URL тайлов NDVI для одного поля (Java proxy → Python)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "1"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: URL тайлов и фактическая дата снимка
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviTilesForFieldResponse"
+        "400":
+          description: Некорректный field_id или дата
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python slope service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /get_ndvi_trend:
+    get:
+      tags: [NDVI]
+      summary: Тренд NDVI по группе полей (Java proxy → Python)
+      description: |
+        Перед получением тренда Java может выполнить прогрев расчётов помесячно (`warmup=true`),
+        чтобы уменьшить вероятность пустого графика при первом запросе.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          description: Идентификаторы полей (повторяющийся query-параметр)
+          schema:
+            type: array
+            items:
+              type: integer
+          style: form
+          explode: true
+          example: [1, 2]
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2023-01-01"
+        - name: end_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2024-01-01"
+        - name: warmup
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+          description: Включить помесячный прогрев NDVI перед запросом тренда
+      responses:
+        "200":
+          description: Данные для графика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NdviTrendResponse"
+        "400":
+          description: Некорректные параметры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python slope service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [NDVI]
+      summary: PNG-тайл NDVI (Java proxy + cache)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+        - name: scene_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          headers:
+            X-Ndvi-Cache:
+              schema:
+                type: string
+              description: Источник кэша (`MISS`, `HIT-MEMORY`, `HIT-S3`)
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл (нет данных)
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python slope service unavailable
+
+  /get_slope_tiles_for_field:
+    get:
+      tags: [Slope]
+      summary: URL тайлов уклонов для одного поля
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema: { type: string }
+          example: "1"
+        - name: date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-06-15"
+      responses:
+        "200":
+          description: URL тайлов и фактическая дата
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlopeTilesForFieldResponse"
+        "400":
+          description: Некорректные параметры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+
+  /get_slope_trend:
+    get:
+      tags: [Slope]
+      summary: Тренд уклонов по группе полей
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: query
+          required: true
+          schema:
+            type: array
+            items: { type: integer }
+          style: form
+          explode: true
+          example: [1, 2]
+        - name: start_date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2023-01-01"
+        - name: end_date
+          in: query
+          required: true
+          schema: { type: string, format: date }
+          example: "2024-01-01"
+      responses:
+        "200":
+          description: Данные для графика
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SlopeTrendResponse"
+        "400":
+          description: Некорректные параметры
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+
+  /slope/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [Slope]
+      summary: PNG-тайл уклонов (структурно как NDVI)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: date
+          in: path
+          required: true
+          schema: { type: string, format: date }
+        - name: scene_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл (пока без рендера)
+        "401":
+          description: Нет сессии / не задана организация
         "404":
           description: Поле не принадлежит организации пользователя
 
@@ -563,6 +993,86 @@ components:
       description: Сессия после входа через POST /login
 
   schemas:
+    PythonNdviTilesForFieldResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL шаблон тайлов `{z}/{x}/{y}`
+          example: "http://localhost:8001/tiles/12/2024-06-15/S2A_20240615/{z}/{x}/{y}.png"
+        actual_date:
+          type: string
+          format: date
+          description: Фактическая дата снимка (может отличаться от запрошенной)
+          example: "2024-06-15"
+
+    PythonNdviTrendResponse:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+          example: ["Apr", "May", "Jun"]
+        data:
+          type: array
+          items: { type: number, format: double }
+          example: [0.41, 0.55, 0.62]
+
+    NdviTilesForFieldResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL шаблон тайлов `{z}/{x}/{y}` через Java proxy (`/tiles/...`)
+          example: "/tiles/12/2024-06-15/S2A_20240615/{z}/{x}/{y}.png"
+        actual_date:
+          type: string
+          format: date
+          description: Фактическая дата снимка (может отличаться от запрошенной)
+          example: "2024-06-15"
+
+    NdviTrendResponse:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+          example: ["Apr", "May", "Jun"]
+        data:
+          type: array
+          items: { type: number, format: double }
+          example: [0.41, 0.55, 0.62]
+
+    SlopeTilesForFieldResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL шаблон тайлов уклонов `{z}/{x}/{y}`
+          example: "/slope/tiles/12/2024-06-15/SLOPE/{z}/{x}/{y}.png"
+        actual_date:
+          type: string
+          format: date
+          example: "2024-06-15"
+
+    SlopeTrendResponse:
+      type: object
+      properties:
+        labels:
+          type: array
+          items: { type: string }
+          example: ["Jan", "Feb", "Mar"]
+        data:
+          type: array
+          items: { type: number, format: double }
+          example: [3.2, 3.6, 3.4]
+
+    PythonErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: "Нет доступных спутниковых данных"
     FieldFeatureCollection:
       type: object
       required: [type, features]

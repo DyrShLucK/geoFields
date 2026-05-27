@@ -346,6 +346,82 @@ body, html {
     z-index: 1000;
 }
 
+.ndvi-map-legend {
+    position: fixed;
+    left: 20px;
+    bottom: 24px;
+    width: 260px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-premium);
+    padding: 10px 12px;
+    z-index: 1200;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.ndvi-map-legend-hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+}
+
+.ndvi-map-legend-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.ndvi-map-legend-bar {
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(
+        90deg,
+        #8b0000 0%,
+        #d73027 16%,
+        #f46d43 32%,
+        #fdae61 48%,
+        #fee08b 64%,
+        #a6d96a 80%,
+        #1a9850 100%
+    );
+    border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.ndvi-map-legend-labels {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.ndvi-map-legend-hint {
+    margin-top: 6px;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.loading-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.loading-spinner {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(148, 163, 184, 0.35);
+    border-top-color: #2563eb;
+    animation: loading-spin 0.8s linear infinite;
+}
+
+@keyframes loading-spin {
+    to { transform: rotate(360deg); }
+}
+
 /* Боковое меню (Добавлено visibility и pointer-events для исключения невидимых блокировок) */
 .sidebar {
     position: fixed;
@@ -439,6 +515,18 @@ body, html {
 .layers-panel {
     top: 92px;
     right: 76px;
+}
+
+.layers-ndvi-list {
+    max-height: min(36vh, 280px);
+    overflow-y: auto;
+    border-top: 1px solid var(--border-color);
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+.dynamic-ndvi-toggle {
+    margin-bottom: 8px;
 }
 
 .filter-panel {
@@ -535,7 +623,7 @@ body, html {
    СПИСОК ВЫБОРА ПОЛЕЙ (UX/UI МУЛЬТИСЕЛЕКТ)
 --------------------------------------------------------- */
 .filter-checkbox-list {
-    max-height: 110px;
+    max-height: min(45vh, 360px);
     overflow-y: auto;
     border: 1px solid var(--border-color);
     border-radius: 10px;
@@ -565,7 +653,7 @@ body, html {
 
 /* Компактный список полей для аналитических карточек */
 .analytics-checkbox-list {
-    max-height: 85px;
+    max-height: min(45vh, 360px);
     overflow-y: auto;
     border: 1px solid var(--border-color);
     border-radius: 10px;
@@ -609,33 +697,258 @@ body, html {
     position: fixed;
     top: 72px;
     right: 0;
-    width: 390px;
+    /* контекст для .analytics-resize-handle */
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    width: var(--analytics-panel-width, 390px);
+    min-width: 320px;
+    max-width: min(75vw, 720px);
     height: calc(100vh - 72px);
     background: white;
     border-left: 1px solid var(--border-color);
     z-index: 2400;
-    overflow-y: auto;
-    padding: 24px;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    visibility: hidden;         /* Скрываем для кликов в закрытом виде (Новое!) */
-    pointer-events: none;       /* Игнорируем мышь в закрытом виде (Новое!) */
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .analytics-panel.open {
     transform: translateX(0);
-    visibility: visible;        /* Показываем при открытии */
-    pointer-events: auto;       /* Включаем события мыши */
+    visibility: visible;
+    pointer-events: auto;
+}
+
+.analytics-panel.is-resizing {
+    transition: none;
+    user-select: none;
+}
+
+.analytics-resize-handle {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 16px;
+    cursor: ew-resize;
+    z-index: 120;
+    touch-action: none;
+    background: transparent;
+}
+
+.analytics-panel-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 20px 24px 32px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.analytics-resize-handle::after {
+    content: "";
+    position: absolute;
+    left: 6px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--border-color);
+    transition: background 0.15s ease;
+    pointer-events: none;
+}
+
+.analytics-resize-handle:hover::after,
+.analytics-resize-handle.is-dragging::after {
+    background: var(--accent-green);
+}
+
+/* Нижняя панель истории поля */
+.field-history-panel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--field-history-panel-height, 260px);
+    min-height: 180px;
+    max-height: 65vh;
+    background: #fff;
+    border-top: 1px solid var(--border-color);
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
+    z-index: 2300;
+    transform: translateY(100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), right 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.field-history-panel.open {
+    transform: translateY(0);
+}
+
+.field-history-panel.is-resizing {
+    transition: none;
+    user-select: none;
+}
+
+.field-history-resize-handle {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 14px;
+    cursor: ns-resize;
+    z-index: 30;
+    touch-action: none;
+}
+
+.field-history-resize-handle::after {
+    content: "";
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 74px;
+    height: 4px;
+    border-radius: 999px;
+    background: #cbd5e1;
+    transition: background 0.15s ease;
+}
+
+.field-history-resize-handle:hover::after,
+.field-history-resize-handle.is-dragging::after {
+    background: var(--accent-green);
+}
+
+.field-history-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px 10px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.field-history-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.field-history-close {
+    border: none;
+    background: transparent;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.field-history-body {
+    overflow: auto;
+    padding: 14px 20px 20px;
+}
+
+.field-history-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.field-history-table th,
+.field-history-table td {
+    border-bottom: 1px solid #e2e8f0;
+    padding: 8px 6px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.field-history-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Контекстное меню поля на карте */
+.field-context-menu {
+    position: fixed;
+    z-index: 5000;
+    min-width: 220px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    box-shadow: var(--shadow-premium);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.field-context-menu.hidden {
+    display: none;
+}
+
+.field-context-menu button {
+    border: none;
+    background: transparent;
+    text-align: left;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    color: var(--text-primary);
+    font-family: inherit;
+}
+
+.field-context-menu button:hover {
+    background: #f0fdf4;
+    color: #047857;
+}
+
+.ndvi-fields-toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.ndvi-list-btn {
+    flex: 1;
+    padding: 5px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #64748b;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.ndvi-list-btn:hover {
+    color: #047857;
+    border-color: #86efac;
+    background: #f0fdf4;
 }
 
 .analytics-header {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     font-size: 18px;
     font-weight: 700;
-    margin-bottom: 20px;
+    margin: 0;
+    padding: 16px 24px;
     color: var(--text-primary);
+    background: #fff;
+    border-bottom: 1px solid var(--border-color);
+    z-index: 10;
 }
 
 .analytics-close {
@@ -760,6 +1073,37 @@ body, html {
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 16px;
+}
+
+.analytics-collapse-btn {
+    width: 100%;
+    border: none;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+}
+
+.analytics-collapse-icon {
+    font-size: 14px;
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+}
+
+.analytics-card.analytics-card-collapsed > :not(.card-title-mini) {
+    display: none !important;
+}
+
+.analytics-card.analytics-card-collapsed .card-title-mini {
+    margin-bottom: 0;
+}
+
+.analytics-card.analytics-card-collapsed .analytics-collapse-icon {
+    transform: rotate(-90deg);
 }
 
 /* Пончик распределения культур */
