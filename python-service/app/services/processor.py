@@ -52,7 +52,8 @@ def clip_index(source_index_path, geometry_dict, output_path):
                 [geometry_dict],
                 crop=True,
                 filled=True,
-                nodata=NODATA
+                nodata=NODATA,
+                all_touched=False,
             )
 
             data = out_image[0].astype(np.float32)

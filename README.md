@@ -74,3 +74,39 @@ cd "./geoFields"
 - В cookie указать JSESSIONID и XSRF-TOKEN
 - Для post запросов получить csrf токен по http://localhost:8080/api/session/context и указать его в загаловках как X-XSRF-TOKEN
 - JSESSIONID и XSRF-TOKEN можно получить при логине, или одноразово скопировать из браузера, если там авторизироваться В F12 APPLICATION (Cookie)
+
+## Что изменено в `docker-compose.yml`
+
+С последнего коммита (`9580b25`) compose был расширен под полный контур NDVI/Slope с Python и S3:
+
+- Добавлен сервис `minio` (S3-совместимое хранилище) с портами `9000/9001`, healthcheck и volume `minio_data`.
+- Добавлены общие env-блоки:
+  - `x-app-environment` теперь содержит `NDVI_PYTHON_BASE_URL` и `S3_*` параметры.
+  - новый `x-python-environment` с `DATABASE_URL`, `GEE_*`, `S3_*`.
+  - новый `x-python-volumes` для единых volume Python-сервисов.
+- Добавлен одноразовый сервис `scene-indexer` (индексация сцен `.tif` в БД после миграций).
+- Обновлены зависимости `depends_on`:
+  - `app` теперь ждёт `flyway`, `python-processor`, `minio`.
+  - `python-processor` теперь ждёт `db`, `flyway`, `scene-indexer`.
+- `python-processor` переведён на общие env/volumes и `restart: unless-stopped`.
+- `flyway` оставлен как отдельный миграционный шаг перед запуском сервисов.
+- Для `db`/`redis`/`app` закомментирован `platform: linux/amd64` (для более гибкого запуска на разных окружениях).
+
+## Изменения в проекте с последнего коммита (в текущем рабочем дереве)
+
+Ключевые изменения, которые уже сделаны:
+
+- NDVI и Slope работают по схеме `front -> Java proxy -> Python` (без прямых браузерных вызовов Python).
+- Добавлен отдельный `SlopePythonClient` и рефакторинг контроллера slope под клиент.
+- Введён общий `RequestValidationService` (проверка org, field ownership, даты, range) и убран дублирующий код из `NdviPythonProxyController` и `SlopeController`.
+- Введён общий helper `PythonClientSupport` для `upstreamDetail` и rewrite URL из Python в proxy-пути Java.
+- Вынесен общий парсер `field_id` (`FieldIdRequestParser`) для NDVI/Slope запросов.
+- Обновлены Java-тесты для slope-контроллера под новую архитектуру.
+- Во фронтенде доработаны NDVI/Slope блоки, динамический NDVI-график по диапазону дат, legend NDVI, history panel, улучшена интерактивность карты и подсветка.
+- Добавлены/обновлены спецификации:
+  - `OpenAPIspec.yaml` (Java proxy API),
+  - `ndvi-outbound-api.yaml`,
+  - `slope-outbound-api.yaml`.
+- В Python-сервисе доработаны S3/MinIO-потоки, кэширование и запись аналитики для корректного тренда NDVI.
+
+Примечание: в `git diff` также есть технические артефакты сборки/кэша (`build`, `__pycache__`, бинарные файлы), их лучше не включать в финальный коммит.

@@ -10,3 +10,4 @@ psycopg2-binary
 Pillow
 matplotlib
 geoalchemy2
+boto3

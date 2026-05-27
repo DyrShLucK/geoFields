@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float, DateTime, Index
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..db import Base
 
@@ -11,6 +12,7 @@ class FieldAnalytic(Base):
     field_id = Column(Integer, nullable=False, index=True)
 
     scene_index_id = Column(Integer, ForeignKey("scene_indices.id"), nullable=True)
+    scene_index = relationship("SceneIndex")
 
     date = Column(Date, nullable=False, index=True)
 

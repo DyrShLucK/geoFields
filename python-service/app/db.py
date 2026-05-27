@@ -34,7 +34,7 @@ def get_db():
 
 def get_field_geometry(field_id: int):
 
-    query = text("SELECT ST_AsGeoJSON(geom) FROM fields WHERE id = :id")
+    query = text("SELECT ST_AsGeoJSON(ST_Transform(geom, 4326)) FROM fields WHERE id = :id")
 
     with engine.connect() as conn:
         result = conn.execute(query, {"id": field_id}).fetchone()

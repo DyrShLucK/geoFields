@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from ..db import Base
 
@@ -9,6 +10,7 @@ class SceneIndex(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     scene_id = Column(Integer, ForeignKey("scenes.id", ondelete="CASCADE"), nullable=False)
+    scene = relationship("Scene")
 
     index_type = Column(String(10), nullable=False)
 

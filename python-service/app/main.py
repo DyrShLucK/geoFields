@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -7,6 +7,7 @@ from fastapi import Depends
 
 from .api.v1.ndvi import router as ndvi_router
 from .utils import tiler
+from .utils import s3_storage
 from .core.config import FIELDS_DIR
 from .db import get_db, get_field_geometry
 
@@ -16,6 +17,8 @@ app = FastAPI(
 )
 
 app.include_router(ndvi_router)
+# Эталон пустого PNG (~334 байта): такие тайлы не отдаём клиенту, только 204 No Content
+EMPTY_TILE_BYTES = tiler.get_empty_bytes()
 
 app.add_middleware(
     CORSMiddleware,
@@ -49,11 +52,17 @@ async def get_tile(
     except Exception:
         geom = None
 
-    if not path.exists():
-        return Response(
-            content=tiler.render_tile(None, z, x, y, field_geometry=geom),
-            media_type="image/png"
+    # Локального GeoTIFF нет — пробуем скачать из MinIO (бакет geofields-ndvi)
+    if not path.exists() and s3_storage.s3_enabled():
+        s3_key = s3_storage.ndvi_tif_key(field_id, date, scene_id)
+        s3_storage.get_file(
+            s3_storage.s3_bucket_ndvi(),
+            s3_key,
+            str(path),
         )
+
+    if not path.exists():
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     tile_bytes = tiler.render_tile(
         path,
@@ -63,10 +72,11 @@ async def get_tile(
         field_geometry=geom
     )
 
-    return Response(
-        content=tile_bytes,
-        media_type="image/png"
-    )
+    # Тайл вне поля или без данных — 204, Java не кэширует такие ответы
+    if tile_bytes == EMPTY_TILE_BYTES:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return Response(content=tile_bytes, media_type="image/png")
 
 if __name__ == "__main__":
     import uvicorn

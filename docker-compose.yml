@@ -10,16 +10,57 @@ x-app-environment: &app-environment
   REDIS_PORT: 6379
   REDIS_PASSWORD: ""
   SERVER_PORT: 8080
+  NDVI_PYTHON_BASE_URL: http://python-processor:8000
+  S3_ENDPOINT: http://minio:9000
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  S3_BUCKET_NDVI: geofields-ndvi
+  S3_BUCKET_TILES: geofields-tiles
+  S3_ENABLED: "true"
 
 x-app-volumes: &app-volumes
   - ./geoFields/build/libs/geoFields-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
   - ./geoFields/src/main/resources/templates:/app/live-resources/templates:ro
   - ./geoFields/src/main/resources/static:/app/live-resources/static:ro
 
+x-python-environment: &python-environment
+  DATABASE_URL: postgresql://postgres:12345@db:5432/geofields
+  GEE_PROJECT_ID: ""
+  GEE_SERVICE_ACCOUNT: ""
+  S3_ENDPOINT: http://minio:9000
+  S3_ACCESS_KEY: minioadmin
+  S3_SECRET_KEY: minioadmin
+  S3_BUCKET_NDVI: geofields-ndvi
+  S3_BUCKET_TILES: geofields-tiles
+  S3_ENABLED: "true"
+
+x-python-volumes: &python-volumes
+  - ./python-service:/app
+  - ./shared-data:/app/storage
+
 services:
+  minio:
+    image: minio/minio:latest
+    container_name: geofields-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: ["server", "/data", "--console-address", ":9001"]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   db:
     image: postgis/postgis:17-3.5
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-db
     restart: unless-stopped
     environment:
@@ -40,7 +81,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-redis
     restart: unless-stopped
     ports:
@@ -54,15 +95,52 @@ services:
       timeout: 5s
       retries: 10
 
+  flyway:
+    image: flyway/flyway
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      -url=jdbc:postgresql://db:5432/geofields
+      -user=postgres
+      -password=12345
+      -locations=filesystem:/flyway/sql
+      -baselineOnMigrate=true
+      migrate
+    volumes:
+      - ./sql:/flyway/sql
+
+  # Одноразовая индексация .tif из /app/storage/raw → таблица scenes (после миграций)
+  scene-indexer:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+    restart: "no"
+    command: ["python", "-m", "app.utils.index_scenes"]
+    environment: *python-environment
+    volumes: *python-volumes
+    depends_on:
+      db:
+        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
+
   app:
     image: eclipse-temurin:21-jre-alpine
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-app
     restart: unless-stopped
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
+      python-processor:
+        condition: service_started
+      minio:
         condition: service_healthy
     environment: *app-environment
     working_dir: /app
@@ -76,32 +154,20 @@ services:
       context: ./python-service
       dockerfile: Dockerfile
     container_name: python_processor
+    restart: unless-stopped
     ports:
       - "8001:8000"
-    volumes:
-      - ./python-service:/app
-      - ./shared-data:/app/storage
-    environment:
-      - DATABASE_URL=postgresql://postgres:12345@db:5432/geofields
-      - GEE_PROJECT_ID=
-      - GEE_SERVICE_ACCOUNT=
+    environment: *python-environment
+    volumes: *python-volumes
     depends_on:
-      - db
-
-  flyway:
-    image: flyway/flyway
-    depends_on:
-      - db
-    command:
-      -url=jdbc:postgresql://db:5432/geofields
-      -user=postgres
-      -password=12345
-      -locations=filesystem:/flyway/sql
-      -baselineOnMigrate=true
-      migrate
-    volumes:
-      - ./sql:/flyway/sql
+      db:
+        condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
+      scene-indexer:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
   redis_data:
+  minio_data:
