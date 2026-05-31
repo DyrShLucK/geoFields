@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from fastapi import Depends
 
 from .api.v1.ndvi import router as ndvi_router
+from .api.v1.elevation import router as elevation_router
 from .utils import tiler
 from .utils import s3_storage
 from .core.config import FIELDS_DIR
@@ -17,6 +18,7 @@ app = FastAPI(
 )
 
 app.include_router(ndvi_router)
+app.include_router(elevation_router)
 # Эталон пустого PNG (~334 байта): такие тайлы не отдаём клиенту, только 204 No Content
 EMPTY_TILE_BYTES = tiler.get_empty_bytes()
 
@@ -77,6 +79,79 @@ async def get_tile(
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     return Response(content=tile_bytes, media_type="image/png")
+
+
+@app.get("/tiles/elevation/{field_id}/{z}/{x}/{y}.png")
+async def get_elevation_tile(
+    field_id: str,
+    z: int,
+    x: int,
+    y: int,
+):
+    """Этап 2: отдача тайлов рельефа с динамической шкалой высот по полю."""
+    path = FIELDS_DIR / field_id / "elevation.tif"
+
+    if not path.exists():
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    try:
+        geom = get_field_geometry(int(field_id))
+    except Exception:
+        geom = None
+
+    vmin, vmax = tiler.get_elevation_range(path)
+
+    tile_bytes = tiler.render_tile(
+        path,
+        z,
+        x,
+        y,
+        field_geometry=geom,
+        layer_type="elevation",
+        vmin=vmin,
+        vmax=vmax,
+    )
+
+    if tile_bytes == EMPTY_TILE_BYTES:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return Response(content=tile_bytes, media_type="image/png")
+
+
+@app.get("/tiles/slope/{field_id}/{z}/{x}/{y}.png")
+async def get_slope_tile(
+    field_id: str,
+    z: int,
+    x: int,
+    y: int,
+):
+    """Тайлы уклона (градусы), шкала 0–15°."""
+    path = FIELDS_DIR / field_id / "slope.tif"
+
+    if not path.exists():
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    try:
+        geom = get_field_geometry(int(field_id))
+    except Exception:
+        geom = None
+
+    tile_bytes = tiler.render_tile(
+        path,
+        z,
+        x,
+        y,
+        field_geometry=geom,
+        layer_type="slope",
+        vmin=0.0,
+        vmax=15.0,
+    )
+
+    if tile_bytes == EMPTY_TILE_BYTES:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return Response(content=tile_bytes, media_type="image/png")
+
 
 if __name__ == "__main__":
     import uvicorn

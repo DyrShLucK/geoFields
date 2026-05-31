@@ -44,6 +44,10 @@ let measureGeoJson = {
 };
 
 let activeNdviLayerIds = [];
+let activeElevationLayerIds = [];
+let activeSlopeLayerIds = [];
+/** @type {Map<string, {min: number, max: number}>} */
+const elevationRangeByFieldId = new Map();
 let highlightedFieldId = null;
 let activeFieldPopup = null;
 let activeFieldPopupFieldId = null;
@@ -99,6 +103,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try { ensureWeatherTabFallbackContent(); } catch (e) { console.error("Сбой WeatherFallback:", e); }
     try { setupSidebarAndPanels(); } catch (e) { console.error("Сбой SidebarAndPanels:", e); }
     try { ensureNdviLegend(); } catch (e) { console.error("Сбой NdviLegend:", e); }
+    try { ensureElevationLegend(); } catch (e) { console.error("Сбой ElevationLegend:", e); }
     try { ensureFieldContextMenu(); } catch (e) { console.error("Сбой FieldContextMenu:", e); }
     try { setupSlopeAnalyticsCard(); } catch (e) { console.error("Сбой SlopeAnalytics:", e); }
     try { setupAnalyticsCardCollapsing(); } catch (e) { console.error("Сбой AnalyticsCollapsing:", e); }
@@ -741,15 +746,44 @@ function onFieldLayerClick(e) {
         `;
     }
 
+    // setDOMContent + обработчик до addTo: setHTML не вставляет узлы в document до addTo(map).
+    const popupRoot = document.createElement("div");
+    popupRoot.style.cssText = "font-family:'Inter', sans-serif; padding:4px; min-width:180px;";
+    popupRoot.innerHTML = `
+        <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">🌿 ${escapeHtml(name)}</strong>
+        <span style="font-size:12px; color:#64748b; font-weight:500;">Площадь: ${area} га</span>
+        ${latestRecordHtml}
+    `;
+
+    const elevationBtn = document.createElement("button");
+    elevationBtn.type = "button";
+    elevationBtn.className = "field-popup-elevation-btn";
+    elevationBtn.textContent = "🏔️ Показать рельеф (SRTM)";
+    elevationBtn.style.cssText =
+        "margin-top:10px;width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;font-weight:600;color:#0f172a;";
+    elevationBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showFieldElevation(fieldId, elevationBtn);
+    });
+    popupRoot.appendChild(elevationBtn);
+
+    const slopeBtn = document.createElement("button");
+    slopeBtn.type = "button";
+    slopeBtn.className = "field-popup-slope-btn";
+    slopeBtn.textContent = "📐 Показать уклон";
+    slopeBtn.style.cssText =
+        "margin-top:6px;width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;font-weight:600;color:#0f172a;";
+    slopeBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        showFieldSlope(fieldId, slopeBtn);
+    });
+    popupRoot.appendChild(slopeBtn);
+
     activeFieldPopup = new maplibregl.Popup({ closeOnClick: false })
         .setLngLat(e.lngLat)
-        .setHTML(`
-            <div style="font-family:'Inter', sans-serif; padding:4px; min-width:180px;">
-                <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">🌿 ${name}</strong>
-                <span style="font-size:12px; color:#64748b; font-weight:500;">Площадь: ${area} га</span>
-                ${latestRecordHtml}
-            </div>
-        `);
+        .setDOMContent(popupRoot);
 
     activeFieldPopup.on("close", () => {
         const closingFieldId = activeFieldPopupFieldId != null ? String(activeFieldPopupFieldId) : null;
@@ -1713,7 +1747,15 @@ function setupNdviCalculation() {
                     addNdviLayer(result.data.url, layerId, result.fieldId);
 
                     // Добавляем переключатель в панель слоев
-                    addLayerToggleToMenu(layerId, result.fieldId, result.data.actual_date);
+                    addLayerToggleToMenu(
+                        layerId,
+                        `NDVI Поле #${result.fieldId} (${result.data.actual_date})`,
+                        {
+                            containerId: "dynamic-layers-container",
+                            blockId: "ndvi-layers-block",
+                            onVisibilityChange: refreshNdviLegendVisibility
+                        }
+                    );
 
                     activeNdviLayerIds.push(layerId);
                     loadedCount++;
@@ -1898,6 +1940,183 @@ function setupAnalyticsCardCollapsing() {
 // =====================================================
 // NDVI: ДОБАВЛЕНИЕ РАСТРОВОГО СЛОЯ НА КАРТУ
 // =====================================================
+// =====================================================
+// РЕЛЬЕФ / УКЛОН: ПОДГОТОВКА И ОТОБРАЖЕНИЕ НА КАРТЕ
+// =====================================================
+async function prepareFieldTerrain(fieldId) {
+    const idStr = String(fieldId);
+    const response = await fetch(pythonApiPath(`/prepare_elevation/${idStr}`), pythonFetchOpts);
+    if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try {
+            const errBody = await response.json();
+            detail = errBody.detail || errBody.error || detail;
+        } catch (_) { /* ignore */ }
+        throw new Error(detail);
+    }
+    const payload = await response.json();
+    if (payload.status !== "ready" || !payload.tile_url) {
+        throw new Error("Сервер не подготовил данные рельефа");
+    }
+    if (payload.elevation_min != null && payload.elevation_max != null) {
+        elevationRangeByFieldId.set(idStr, {
+            min: Number(payload.elevation_min),
+            max: Number(payload.elevation_max)
+        });
+    }
+    return payload;
+}
+
+function removeRasterLayer(sourceId, layerId) {
+    if (!map) return;
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+}
+
+function addRasterLayer(tileUrlTemplate, sourceId, layerId, fieldId) {
+    const source = { type: "raster", tiles: [tileUrlTemplate], tileSize: 256 };
+    const bounds = getFieldBoundsById(String(fieldId));
+    if (bounds) source.bounds = bounds;
+    map.addSource(sourceId, source);
+    map.addLayer(
+        {
+            id: layerId,
+            type: "raster",
+            source: sourceId,
+            paint: { "raster-opacity": 0.8 }
+        },
+        "fields-outline"
+    );
+}
+
+function isLayerVisibleOnMap(layerId) {
+    if (!map || !map.getLayer(layerId)) return false;
+    const visibility = map.getLayoutProperty(layerId, "visibility");
+    return visibility !== "none";
+}
+
+function updateLayersBlockEmptyState(blockId, containerId) {
+    const block = document.getElementById(blockId);
+    const container = document.getElementById(containerId);
+    if (!block || !container) return;
+    block.classList.toggle("is-empty", container.children.length === 0);
+}
+
+function layoutMapLegends() {
+    const elevLegend = document.getElementById("elevation-map-legend");
+    const ndviLegend = document.getElementById("ndvi-map-legend");
+    if (!elevLegend) return;
+    const ndviVisible = ndviLegend && !ndviLegend.classList.contains("ndvi-map-legend-hidden");
+    elevLegend.style.bottom = ndviVisible ? "108px" : "24px";
+}
+
+async function runTerrainButtonAction(buttonElement, originalLabel, action) {
+    if (buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.textContent = "⏳ Подготовка данных...";
+    }
+    try {
+        await action();
+        if (buttonElement) {
+            buttonElement.textContent = "✅ Готово";
+            setTimeout(() => {
+                buttonElement.style.display = "none";
+            }, 2000);
+        }
+    } catch (error) {
+        if (buttonElement) {
+            buttonElement.disabled = false;
+            buttonElement.textContent = originalLabel;
+        }
+        throw error;
+    }
+}
+
+/**
+ * Lazy-loading рельефа: prepare → raster source → слой + пункт в «Слои карты».
+ */
+async function showFieldElevation(fieldId, buttonElement) {
+    if (!map) {
+        console.error("showFieldElevation: карта не инициализирована");
+        return;
+    }
+
+    const idStr = String(fieldId);
+    const sourceId = `elevation-source-${idStr}`;
+    const layerId = `elevation-layer-${idStr}`;
+    const originalLabel = buttonElement?.textContent || "🏔️ Показать рельеф (SRTM)";
+
+    try {
+        await runTerrainButtonAction(buttonElement, originalLabel, async () => {
+            const payload = await prepareFieldTerrain(idStr);
+            removeRasterLayer(sourceId, layerId);
+            addRasterLayer(payload.tile_url, sourceId, layerId, idStr);
+
+            if (!activeElevationLayerIds.includes(layerId)) {
+                activeElevationLayerIds.push(layerId);
+            }
+
+            if (!document.getElementById(`toggle-${layerId}`)) {
+                addLayerToggleToMenu(layerId, `Рельеф поля #${idStr}`, {
+                    containerId: "dynamic-elevation-layers-container",
+                    blockId: "elevation-layers-block",
+                    rowClass: "dynamic-elevation-toggle",
+                    onVisibilityChange: refreshElevationLegendVisibility
+                });
+            }
+
+            refreshElevationLegendVisibility();
+        });
+    } catch (error) {
+        console.error("showFieldElevation:", error);
+        alert(`Не удалось загрузить рельеф: ${error.message}`);
+    }
+}
+
+/**
+ * Уклон: тот же prepare (elevation + slope.tif), тайлы /tiles/slope/...
+ */
+async function showFieldSlope(fieldId, buttonElement) {
+    if (!map) {
+        console.error("showFieldSlope: карта не инициализирована");
+        return;
+    }
+
+    const idStr = String(fieldId);
+    const sourceId = `slope-source-${idStr}`;
+    const layerId = `slope-layer-${idStr}`;
+    const originalLabel = buttonElement?.textContent || "📐 Показать уклон";
+
+    try {
+        await runTerrainButtonAction(buttonElement, originalLabel, async () => {
+            const payload = await prepareFieldTerrain(idStr);
+            const slopeUrl = payload.slope_tile_url;
+            if (!slopeUrl) {
+                throw new Error("Сервер не вернул URL тайлов уклона");
+            }
+
+            removeRasterLayer(sourceId, layerId);
+            addRasterLayer(slopeUrl, sourceId, layerId, idStr);
+
+            if (!activeSlopeLayerIds.includes(layerId)) {
+                activeSlopeLayerIds.push(layerId);
+            }
+
+            if (!document.getElementById(`toggle-${layerId}`)) {
+                addLayerToggleToMenu(layerId, `Уклон поля #${idStr}`, {
+                    containerId: "dynamic-slope-layers-container",
+                    blockId: "slope-layers-block",
+                    rowClass: "dynamic-slope-toggle",
+                    onVisibilityChange: () => updateLayersBlockEmptyState("slope-layers-block", "dynamic-slope-layers-container")
+                });
+            }
+        });
+    } catch (error) {
+        console.error("showFieldSlope:", error);
+        alert(`Не удалось загрузить уклон: ${error.message}`);
+    }
+}
+
 function addNdviLayer(tileUrlTemplate, layerId, fieldId) {
     if (!map) return;
     if (map.getLayer(layerId)) {
@@ -1914,42 +2133,48 @@ function addNdviLayer(tileUrlTemplate, layerId, fieldId) {
         id: layerId, type: "raster", source: layerId,
         paint: { "raster-opacity": 0.8 }
     }, "fields-outline");
-    setNdviLegendVisible(true);
+    refreshNdviLegendVisibility();
 }
 
-// НОВАЯ ФУНКЦИЯ: Добавляет чекбокс в панель слоев
 // =====================================================
-// NDVI: ПЕРЕКЛЮЧАТЕЛЬ СЛОЯ В ПАНЕЛИ
+// ПЕРЕКЛЮЧАТЕЛЬ РАСТРОВОГО СЛОЯ В ПАНЕЛИ «СЛОИ КАРТЫ»
 // =====================================================
-function addLayerToggleToMenu(layerId, fieldId, dateStr) {
-    let dynamicContainer = document.getElementById("dynamic-layers-container");
+function addLayerToggleToMenu(layerId, label, options = {}) {
+    const containerId = options.containerId || "dynamic-layers-container";
+    const blockId = options.blockId || "ndvi-layers-block";
+    const rowClass = options.rowClass || "dynamic-ndvi-toggle";
+    const dynamicContainer = document.getElementById(containerId);
     if (!dynamicContainer) return;
 
-    // Создаем элемент списка (чекбокс + текст)
+    if (document.getElementById(`toggle-${layerId}`)) {
+        updateLayersBlockEmptyState(blockId, containerId);
+        return;
+    }
+
     const labelRow = document.createElement("label");
-    labelRow.className = "filter-checkbox-row dynamic-ndvi-toggle"; // Используем ваши классы стилей
+    labelRow.className = `filter-checkbox-row ${rowClass}`;
     labelRow.id = `toggle-${layerId}`;
 
-    // Сам чекбокс
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
-    checkbox.checked = true; // Слой включен по умолчанию
+    checkbox.checked = true;
 
-    // Название слоя
     const span = document.createElement("span");
-    span.textContent = `NDVI Поле #${fieldId} (${dateStr})`;
+    span.textContent = label;
 
-    // Вешаем событие: при клике включаем/выключаем слой на карте
     checkbox.addEventListener("change", (e) => {
         if (map && map.getLayer(layerId)) {
-            const visibility = e.target.checked ? 'visible' : 'none';
-            map.setLayoutProperty(layerId, 'visibility', visibility);
+            map.setLayoutProperty(layerId, "visibility", e.target.checked ? "visible" : "none");
+        }
+        if (typeof options.onVisibilityChange === "function") {
+            options.onVisibilityChange();
         }
     });
 
     labelRow.appendChild(checkbox);
     labelRow.appendChild(span);
     dynamicContainer.appendChild(labelRow);
+    updateLayersBlockEmptyState(blockId, containerId);
 }
 
 // НОВАЯ ФУНКЦИЯ: Очищает слои с карты и удаляет их из меню
@@ -1967,8 +2192,72 @@ function clearNdviLayers() {
         const toggleEl = document.getElementById(`toggle-${layerId}`);
         if (toggleEl) toggleEl.remove();
     });
-    activeNdviLayerIds = []; // Обнуляем список
-    setNdviLegendVisible(false);
+    activeNdviLayerIds = [];
+    refreshNdviLegendVisibility();
+}
+
+function refreshNdviLegendVisibility() {
+    const anyVisible = activeNdviLayerIds.some(id => isLayerVisibleOnMap(id));
+    setNdviLegendVisible(anyVisible);
+    layoutMapLegends();
+}
+
+// =====================================================
+// РЕЛЬЕФ: ЛЕГЕНДА НА КАРТЕ
+// =====================================================
+function ensureElevationLegend() {
+    if (document.getElementById("elevation-map-legend")) return;
+    const legend = document.createElement("div");
+    legend.id = "elevation-map-legend";
+    legend.className = "elevation-map-legend elevation-map-legend-hidden";
+    legend.innerHTML = `
+        <div class="elevation-map-legend-title">Легенда рельефа (м)</div>
+        <div class="elevation-map-legend-bar"></div>
+        <div class="elevation-map-legend-labels" id="elevation-legend-labels">
+            <span id="elevation-legend-min">—</span>
+            <span id="elevation-legend-max">—</span>
+        </div>
+        <div class="elevation-map-legend-hint">Шкала по видимым слоям рельефа</div>
+    `;
+    document.body.appendChild(legend);
+}
+
+function updateElevationLegendLabels() {
+    const minEl = document.getElementById("elevation-legend-min");
+    const maxEl = document.getElementById("elevation-legend-max");
+    if (!minEl || !maxEl) return;
+
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+    activeElevationLayerIds.forEach(layerId => {
+        if (!isLayerVisibleOnMap(layerId)) return;
+        const fieldId = layerId.replace("elevation-layer-", "");
+        const range = elevationRangeByFieldId.get(fieldId);
+        if (!range) return;
+        minVal = Math.min(minVal, range.min);
+        maxVal = Math.max(maxVal, range.max);
+    });
+
+    if (!Number.isFinite(minVal) || !Number.isFinite(maxVal)) {
+        minEl.textContent = "—";
+        maxEl.textContent = "—";
+        return;
+    }
+    minEl.textContent = `${Math.round(minVal)} м`;
+    maxEl.textContent = `${Math.round(maxVal)} м`;
+}
+
+function refreshElevationLegendVisibility() {
+    const anyVisible = activeElevationLayerIds.some(id => isLayerVisibleOnMap(id));
+    setElevationLegendVisible(anyVisible);
+    updateElevationLegendLabels();
+    layoutMapLegends();
+}
+
+function setElevationLegendVisible(visible) {
+    const legend = document.getElementById("elevation-map-legend");
+    if (!legend) return;
+    legend.classList.toggle("elevation-map-legend-hidden", !visible);
 }
 
 // =====================================================
@@ -1999,6 +2288,7 @@ function setNdviLegendVisible(visible) {
     const legend = document.getElementById("ndvi-map-legend");
     if (!legend) return;
     legend.classList.toggle("ndvi-map-legend-hidden", !visible);
+    layoutMapLegends();
 }
 
 // =====================================================

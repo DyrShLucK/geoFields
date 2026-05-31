@@ -7,8 +7,9 @@ STORAGE_DIR = BASE_DIR / "storage"
 RAW_DIR = STORAGE_DIR / "raw"
 INDICES_DIR = STORAGE_DIR / "indices"
 FIELDS_DIR = STORAGE_DIR / "fields"
+ELEVATION_RAW_PATH = RAW_DIR / "elevation" / "srtm.tif"
 
-for p in [RAW_DIR, INDICES_DIR, FIELDS_DIR]:
+for p in [RAW_DIR, INDICES_DIR, FIELDS_DIR, ELEVATION_RAW_PATH.parent]:
     p.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = os.getenv("DATABASE_URL")

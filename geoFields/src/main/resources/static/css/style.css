@@ -403,6 +403,72 @@ body, html {
     color: #64748b;
 }
 
+.map-layers-block.is-empty {
+    display: none;
+}
+
+.layers-dynamic-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.elevation-map-legend {
+    position: fixed;
+    left: 20px;
+    bottom: 24px;
+    width: 260px;
+    background: rgba(255, 255, 255, 0.96);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-premium);
+    padding: 10px 12px;
+    z-index: 1200;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.elevation-map-legend-hidden {
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+}
+
+.elevation-map-legend-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.elevation-map-legend-bar {
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(
+        90deg,
+        #333366 0%,
+        #336666 20%,
+        #669933 40%,
+        #cccc33 60%,
+        #ffffff 80%,
+        #999999 100%
+    );
+    border: 1px solid rgba(148, 163, 184, 0.35);
+}
+
+.elevation-map-legend-labels {
+    margin-top: 6px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: #64748b;
+}
+
+.elevation-map-legend-hint {
+    margin-top: 6px;
+    font-size: 10px;
+    color: #64748b;
+}
+
 .loading-inline {
     display: inline-flex;
     align-items: center;

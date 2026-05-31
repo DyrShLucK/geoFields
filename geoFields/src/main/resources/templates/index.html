@@ -113,13 +113,23 @@
             <span>Контуры полей</span>
         </label>
 
-        <div id="ndvi-layers-block" class="ndvi-layers-block is-empty">
-            <div class="group-title ndvi-layers-group-title">Слои NDVI</div>
+        <div id="ndvi-layers-block" class="map-layers-block is-empty">
+            <div class="group-title">Слои NDVI</div>
             <div class="ndvi-fields-toolbar" id="ndvi-layers-toolbar">
                 <button type="button" class="ndvi-list-btn" data-action="all">Выбрать все</button>
                 <button type="button" class="ndvi-list-btn" data-action="none">Убрать все</button>
             </div>
-            <div class="layers-ndvi-list" id="dynamic-layers-container"></div>
+            <div class="layers-dynamic-list" id="dynamic-layers-container"></div>
+        </div>
+
+        <div id="elevation-layers-block" class="map-layers-block is-empty">
+            <div class="group-title">Слои рельефа (SRTM)</div>
+            <div class="layers-dynamic-list" id="dynamic-elevation-layers-container"></div>
+        </div>
+
+        <div id="slope-layers-block" class="map-layers-block is-empty">
+            <div class="group-title">Слои уклона</div>
+            <div class="layers-dynamic-list" id="dynamic-slope-layers-container"></div>
         </div>
     </div>
 
