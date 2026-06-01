@@ -8,12 +8,21 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.web.filter.OncePerRequestFilter;
 
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+
+import java.io.IOException;
 import java.util.List;
 
 // Правила доступа к URL - отдельно от кодирования паролей и от загрузки пользователя из БД.
@@ -34,7 +43,10 @@ public class SecurityConfig {
                 || "/get_ndvi_trend".equals(uri)
                 || "/get_slope_tiles_for_field".equals(uri)
                 || "/get_slope_trend".equals(uri)
+                || uri.startsWith("/prepare_elevation/")
                 || uri.startsWith("/slope/tiles/")
+                || uri.startsWith("/tiles/elevation/")
+                || uri.startsWith("/tiles/slope/")
                 || uri.startsWith("/tiles/");
     };
 
@@ -45,6 +57,10 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 )
+                // Принудительно материализуем CSRF-токен на каждом запросе, чтобы cookie
+                // XSRF-TOKEN всегда выставлялся (иначе первый POST со страницы, делавшей
+                // только GET-запросы, например импорт с карты, падает с 403).
+                .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex.defaultAuthenticationEntryPointFor(
                         new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
                         JSON_FETCH_ENDPOINTS))
@@ -68,12 +84,15 @@ public class SecurityConfig {
                                 "/org/agronomist",
                                 "/org/agronomist/**",
                                 "/api/org/agronomist",
-                                "/api/org/agronomist/**")
+                                "/api/org/agronomist/**",
+                                "/api/fields/import/**")
                         .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form
-                        .loginPage("/login")
+                        .loginPage("/about")
+                        .loginProcessingUrl("/login")
+                        .failureUrl("/login?error")
                         .usernameParameter("login")
                         .passwordParameter("password")
                         .defaultSuccessUrl("/", true)
@@ -81,10 +100,26 @@ public class SecurityConfig {
                 )
                 .logout(logout -> logout
                         .logoutUrl("/logout")
-                        .logoutSuccessUrl("/login?logout")
+                        .logoutSuccessUrl("/about?logout")
                         .permitAll()
                 );
         return http.build();
+    }
+
+    /**
+     * Обращается к отложенному CSRF-токену, заставляя {@link CookieCsrfTokenRepository}
+     * записать cookie XSRF-TOKEN в ответ ещё до выполнения каких-либо POST-запросов.
+     */
+    static final class CsrfCookieFilter extends OncePerRequestFilter {
+        @Override
+        protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+                throws ServletException, IOException {
+            CsrfToken csrfToken = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
+            if (csrfToken != null) {
+                csrfToken.getToken();
+            }
+            filterChain.doFilter(request, response);
+        }
     }
 
     @Bean

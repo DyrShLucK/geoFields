@@ -11,7 +11,7 @@ info:
     Главная `/` отдаёт HTML без данных пользователя; контекст сессии — `GET /api/session/context`.
 
     HTML-страницы (`/`, `/login`, `/register`, `/org/manager`, `/org/admin`, `/org/agronomist`) как разметка в спецификации не описаны.
-  version: 1.4.2
+  version: 1.4.3
 
 servers:
   - url: http://localhost:8080
@@ -24,6 +24,8 @@ tags:
     description: Заглушки тайлов и значения NDVI
   - name: Slope
     description: Уклоны по полям (структура ответов как у NDVI)
+  - name: Elevation
+    description: Рельеф и уклон по SRTM (prepare + тайлы на карте)
   - name: OrgManager
     description: Менеджер организации (роли ORG_MANAGER, ORG_ADMIN)
   - name: OrgAdmin
@@ -565,6 +567,125 @@ paths:
         "404":
           description: Поле не принадлежит организации пользователя
 
+  /prepare_elevation/{field_id}:
+    get:
+      tags: [Elevation]
+      summary: Подготовить рельеф и уклон (SRTM) для поля
+      description: |
+        Прокси к Python `/prepare_elevation/{field_id}`.
+        Возвращает URL шаблоны тайлов рельефа и уклона относительно Java-сервера.
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+          example: "1"
+      responses:
+        "200":
+          description: Данные готовы к отображению на карте
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepareElevationResponse"
+        "400":
+          description: Некорректный field_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python elevation service unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimpleError"
+
+  /tiles/elevation/{field_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [Elevation]
+      summary: PNG-тайл рельефа (SRTM)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл (нет данных)
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python elevation service unavailable
+
+  /tiles/slope/{field_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [Elevation]
+      summary: PNG-тайл уклона по SRTM (не путать с /slope/tiles/… по дате снимка)
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл (нет данных)
+        "401":
+          description: Нет сессии / не задана организация
+        "404":
+          description: Поле не принадлежит организации пользователя
+        "502":
+          description: Python elevation service unavailable
+
   /get_all_ndvi_tile:
     get:
       tags: [NDVI]
@@ -1066,6 +1187,30 @@ components:
           type: array
           items: { type: number, format: double }
           example: [3.2, 3.6, 3.4]
+
+    PrepareElevationResponse:
+      type: object
+      required: [status, tile_url]
+      properties:
+        status:
+          type: string
+          example: ready
+        tile_url:
+          type: string
+          description: URL шаблон тайлов рельефа `{z}/{x}/{y}`
+          example: "/tiles/elevation/1/{z}/{x}/{y}.png"
+        slope_tile_url:
+          type: string
+          description: URL шаблон тайлов уклона по SRTM
+          example: "/tiles/slope/1/{z}/{x}/{y}.png"
+        elevation_min:
+          type: number
+          format: double
+          example: 112.5
+        elevation_max:
+          type: number
+          format: double
+          example: 186.3
 
     PythonErrorResponse:
       type: object

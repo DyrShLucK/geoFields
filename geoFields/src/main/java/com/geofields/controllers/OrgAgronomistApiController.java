@@ -18,6 +18,7 @@ import com.geofields.repository.row.FieldOptionRow;
 import com.geofields.security.GeoFieldsUserDetails;
 import com.geofields.support.web.CsrfTokenReader;
 import com.geofields.service.FieldAddService;
+import com.geofields.service.FieldCropHistoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -44,15 +45,19 @@ public class OrgAgronomistApiController {
     private final FieldCropHistoryRepository fieldCropHistoryRepository;
     private final OrganizationRepository organizationRepository;
     private final FieldAddService fieldAddService;
+    private final FieldCropHistoryService fieldCropHistoryService;
 
     public OrgAgronomistApiController(
             FieldRepository fieldRepository,
             FieldCropHistoryRepository fieldCropHistoryRepository,
-            OrganizationRepository organizationRepository, FieldAddService fieldAddService) {
+            OrganizationRepository organizationRepository,
+            FieldAddService fieldAddService,
+            FieldCropHistoryService fieldCropHistoryService) {
         this.fieldRepository = fieldRepository;
         this.fieldCropHistoryRepository = fieldCropHistoryRepository;
         this.organizationRepository = organizationRepository;
         this.fieldAddService = fieldAddService;
+        this.fieldCropHistoryService = fieldCropHistoryService;
     }
 
     @GetMapping("/summary")
@@ -109,29 +114,16 @@ public class OrgAgronomistApiController {
                     actorUserId, orgId, fieldId);
             return ResponseEntity.notFound().build();
         }
-        if (fieldCropHistoryRepository.findCropIdIfExists(body.cropId()).isEmpty()) {
-            log.warn("userId={} orgId={} action=create_history fieldId={} cropId={} success=false reason=unknown_crop",
-                    actorUserId, orgId, fieldId, body.cropId());
-            return ResponseEntity.badRequest().body(new ActionMessageResponse("Неизвестная культура (crop_id)"));
+        try {
+            long id = fieldCropHistoryService.insert(fieldId, orgId, body);
+            log.info("userId={} orgId={} action=create_history fieldId={} historyId={} success=true",
+                    actorUserId, orgId, fieldId, id);
+            return ResponseEntity.ok(new ActionMessageResponse("Запись добавлена", id));
+        } catch (IllegalArgumentException ex) {
+            log.warn("userId={} orgId={} action=create_history fieldId={} cropId={} success=false reason={}",
+                    actorUserId, orgId, fieldId, body.cropId(), ex.getMessage());
+            return ResponseEntity.badRequest().body(new ActionMessageResponse(ex.getMessage()));
         }
-        long id = fieldCropHistoryRepository.insertHistory(
-                fieldId,
-                orgId,
-                body.cropId(),
-                body.sowingDate(),
-                body.harvestDate(),
-                body.sownAreaHa(),
-                body.harvestAreaHa(),
-                body.actualYield(),
-                body.totalYield(),
-                body.plannedYield(),
-                body.forecastedYield(),
-                body.sourceData(),
-                body.sowingDetails(),
-                body.cropYear());
-        log.info("userId={} orgId={} action=create_history fieldId={} historyId={} success=true",
-                actorUserId, orgId, fieldId, id);
-        return ResponseEntity.ok(new ActionMessageResponse("Запись добавлена", id));
     }
 
     @PostMapping("/fields/intake")
@@ -164,34 +156,21 @@ public class OrgAgronomistApiController {
                     actorUserId, orgId, historyId);
             return ResponseEntity.notFound().build();
         }
-        if (fieldCropHistoryRepository.findCropIdIfExists(body.cropId()).isEmpty()) {
-            log.warn("userId={} orgId={} action=update_history historyId={} cropId={} success=false reason=unknown_crop",
-                    actorUserId, orgId, historyId, body.cropId());
-            return ResponseEntity.badRequest().body(new ActionMessageResponse("Неизвестная культура (crop_id)"));
-        }
-        int n = fieldCropHistoryRepository.updateHistory(
-                historyId,
-                orgId,
-                body.cropId(),
-                body.sowingDate(),
-                body.harvestDate(),
-                body.sownAreaHa(),
-                body.harvestAreaHa(),
-                body.actualYield(),
-                body.totalYield(),
-                body.plannedYield(),
-                body.forecastedYield(),
-                body.sourceData(),
-                body.sowingDetails(),
-                body.cropYear());
-        if (n == 0) {
-            log.warn("userId={} orgId={} action=update_history historyId={} success=false reason=no_rows_updated",
+        try {
+            int n = fieldCropHistoryService.update(historyId, orgId, body);
+            if (n == 0) {
+                log.warn("userId={} orgId={} action=update_history historyId={} success=false reason=no_rows_updated",
+                        actorUserId, orgId, historyId);
+                return ResponseEntity.notFound().build();
+            }
+            log.info("userId={} orgId={} action=update_history historyId={} success=true",
                     actorUserId, orgId, historyId);
-            return ResponseEntity.notFound().build();
+            return ResponseEntity.ok(new ActionMessageResponse("Запись обновлена", historyId));
+        } catch (IllegalArgumentException ex) {
+            log.warn("userId={} orgId={} action=update_history historyId={} cropId={} success=false reason={}",
+                    actorUserId, orgId, historyId, body.cropId(), ex.getMessage());
+            return ResponseEntity.badRequest().body(new ActionMessageResponse(ex.getMessage()));
         }
-        log.info("userId={} orgId={} action=update_history historyId={} success=true",
-                actorUserId, orgId, historyId);
-        return ResponseEntity.ok(new ActionMessageResponse("Запись обновлена", historyId));
     }
 
     @PutMapping("/fields/{fieldId}/status")

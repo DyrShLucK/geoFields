@@ -2,8 +2,6 @@ package com.geofields.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.geofields.dto.FieldFeatureCollectionDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,13 +16,10 @@ public class NdviExternalFetchPlaceholder {
 
     private static final Logger log = LoggerFactory.getLogger(NdviExternalFetchPlaceholder.class);
 
-    private final ObjectMapper objectMapper = createObjectMapper();
+    private final ObjectMapper objectMapper;
 
-    private static ObjectMapper createObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.registerModule(new JavaTimeModule());
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-        return mapper;
+    public NdviExternalFetchPlaceholder(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
     }
 
     public void requestTileForField(

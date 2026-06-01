@@ -1,7 +1,7 @@
 // =====================================================
 // ПАРАМЕТРЫ API И БАЗОВЫЕ НАСТРОЙКИ
 // =====================================================
-const API_URL = "http://localhost:8080";
+const API_URL = "";
 const PYTHON_API_URL = "http://localhost:8001";
 const _apiBase = String(API_URL || "").trim().replace(/\/$/, "");
 const _pythonApiBase = String(PYTHON_API_URL || "").trim().replace(/\/$/, "");
@@ -25,7 +25,7 @@ function pythonApiPath(path) {
     return _pythonApiBase ? _pythonApiBase + p : p;
 }
 
-// =====================================================
+// =====================================================каль
 // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ И НАСТРОЙКИ КАРТЫ
 // =====================================================
 const SARATOV_CENTER = [46.03, 51.54]; 
@@ -33,6 +33,29 @@ const SARATOV_ZOOM = 7.5;
 
 let map = null;
 let loadedFieldsGeoJson = null;
+let hasAnyFields = false;
+
+// Аналитика недоступна, если у организации нет полей ИЛИ идёт импорт / добавление поля.
+function updateAnalyticsAvailability() {
+    const toggle = document.getElementById("analytics-toggle");
+    if (!toggle) return;
+    const workflowActive = window.geoImportPreviewActive === true || window.geoFieldIntakeActive === true;
+    const blocked = !hasAnyFields || workflowActive;
+
+    toggle.classList.toggle("is-disabled", blocked);
+    toggle.toggleAttribute("disabled", blocked);
+    if (blocked) {
+        document.getElementById("analytics-panel")?.classList.remove("open");
+        if (typeof syncFieldHistoryPanelLayout === "function") syncFieldHistoryPanelLayout();
+    }
+    toggle.title = window.geoFieldIntakeActive
+        ? "Аналитика недоступна во время добавления поля"
+        : (window.geoImportPreviewActive
+            ? "Аналитика недоступна во время импорта"
+            : (!hasAnyFields
+                ? "Аналитика недоступна: у организации нет полей"
+                : "Панель аналитики"));
+}
 let currentNdviLayerId = null;
 
 // Переменные измерительной линейки
@@ -102,13 +125,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     try { setupAnalyticsTabs(); } catch (e) { console.error("Сбой AnalyticsTabs:", e); }
     try { ensureWeatherTabFallbackContent(); } catch (e) { console.error("Сбой WeatherFallback:", e); }
     try { setupSidebarAndPanels(); } catch (e) { console.error("Сбой SidebarAndPanels:", e); }
-    try { ensureNdviLegend(); } catch (e) { console.error("Сбой NdviLegend:", e); }
-    try { ensureElevationLegend(); } catch (e) { console.error("Сбой ElevationLegend:", e); }
+    try { ensureMapLegendsPanel(); } catch (e) { console.error("Сбой MapLegends:", e); }
     try { ensureFieldContextMenu(); } catch (e) { console.error("Сбой FieldContextMenu:", e); }
     try { setupSlopeAnalyticsCard(); } catch (e) { console.error("Сбой SlopeAnalytics:", e); }
     try { setupAnalyticsCardCollapsing(); } catch (e) { console.error("Сбой AnalyticsCollapsing:", e); }
     try { setupNdviCalculation(); } catch (e) { console.error("Сбой NdviCalculation:", e); }
-    try { setupSlopeCalculation(); } catch (e) { console.error("Сбой SlopeCalculation:", e); }
+    try { setupTerrainMapLayers(); } catch (e) { console.error("Сбой TerrainMapLayers:", e); }
     try { initChartTooltips(); } catch (e) { console.error("Сбой ChartTooltips:", e); }
 
     // 3. Безопасная инициализация карты MapLibre GL
@@ -166,6 +188,7 @@ function initMap() {
         await loadFields();
         setupMeasureTool();
         populateNdviFieldsChecklist(loadedFieldsGeoJson);
+        ensureMapLayersToolbars();
     });
 }
 
@@ -226,7 +249,9 @@ function buildMenuForRole(role) {
     const menuContainer = document.getElementById("dynamic-menu");
     if (!menuContainer) return;
 
+    window.geoCurrentUserRole = role;
     const items = MENU_TEMPLATES[role] || MENU_TEMPLATES["USER"];
+    const canFieldOps = role === "AGRONOMIST" || role === "ORG_ADMIN";
     
     let html = '<div class="sidebar-heading">Модули systems</div>';
     items.forEach(item => {
@@ -238,16 +263,25 @@ function buildMenuForRole(role) {
         `;
     });
 
-    html += `
+    if (canFieldOps) {
+        html += `
         <div class="sidebar-heading" style="margin-top:20px;">Операции</div>
-        <button class="sidebar-item" id="btn-import-trigger" style="border:none; background:transparent; width:100%; text-align:left; cursor:pointer;">
-            <span class="sidebar-icon">📥</span> Импорт SHP / GeoJSON
+        <button type="button" class="sidebar-item sidebar-item-btn" id="btn-add-field-trigger">
+            <span class="sidebar-icon">➕</span> Добавить поле вручную
         </button>
-    `;
+        <button type="button" class="sidebar-item sidebar-item-btn" id="btn-import-trigger">
+            <span class="sidebar-icon">🤖</span> ИИ-импорт полей (SHP)
+        </button>
+        `;
+    }
 
     menuContainer.innerHTML = html;
 
     document.getElementById("btn-import-trigger")?.addEventListener("click", () => {
+        if (window.geoFieldIntakeActive) {
+            alert("Сначала завершите или отмените добавление поля.");
+            return;
+        }
         document.getElementById("import-modal")?.classList.add("open");
     });
 }
@@ -311,6 +345,14 @@ function escapeHtml(value) {
 function getFeatureFieldId(feature) {
     const props = feature?.properties || {};
     return String(props.id ?? props.fieldId ?? feature?.id ?? "");
+}
+
+function getFieldDisplayName(fieldId) {
+    const idStr = String(fieldId);
+    const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === idStr);
+    const props = feature?.properties || {};
+    const name = props.name || props.fieldName;
+    return name && String(name).trim() ? String(name).trim() : `Поле #${idStr}`;
 }
 
 function getFieldBoundsById(fieldId) {
@@ -441,6 +483,26 @@ function ensureSoilFieldsToolbar() {
     );
 }
 
+function ensureTerrainFieldsToolbar() {
+    ensureFieldsToolbar(
+        "terrain-fields-toolbar",
+        "terrain-fields-checklist",
+        () => selectAllTerrainFields(true),
+        () => selectAllTerrainFields(false)
+    );
+}
+
+function selectAllTerrainFields(selected) {
+    document.querySelectorAll(".terrain-filter-checkbox").forEach(cb => {
+        cb.checked = selected;
+    });
+}
+
+function getSelectedTerrainFieldIds() {
+    return Array.from(document.querySelectorAll(".terrain-filter-checkbox:checked"))
+        .map(cb => String(cb.value));
+}
+
 function toggleAnalyticsCheckbox(cssClass, fieldId) {
     const cb = document.querySelector(`.${cssClass}[value="${CSS.escape(String(fieldId))}"]`);
     if (!cb) return;
@@ -458,6 +520,17 @@ function setNdviFieldSelected(fieldId, selected) {
     syncNdviCheckboxUI(idStr, selected);
     setFieldFeatureState(idStr, { ndviSelected: selected });
     updateFieldContextMenuLabels();
+}
+
+function setAnalyticsCheckboxSelected(cssClass, fieldId, selected) {
+    const cb = document.querySelector(`.${cssClass}[value="${CSS.escape(String(fieldId))}"]`);
+    if (!cb || cb.checked === selected) return;
+    cb.checked = selected;
+    cb.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function setTerrainFieldSelected(fieldId, selected) {
+    setAnalyticsCheckboxSelected("terrain-filter-checkbox", fieldId, selected);
 }
 
 function toggleNdviFieldSelected(fieldId) {
@@ -495,16 +568,37 @@ function updateFieldContextMenuLabels() {
             ? "Убрать из статистики почвы"
             : "Выбрать для статистики почвы";
     }
+    const terrainBtn = menu.querySelector("[data-action='toggle-terrain']");
+    if (terrainBtn) {
+        const terrainCb = document.querySelector(`.terrain-filter-checkbox[value="${CSS.escape(id)}"]`);
+        terrainBtn.textContent = terrainCb?.checked
+            ? "Убрать из рельефа и уклона"
+            : "Выбрать для рельефа и уклона";
+    }
 }
 
 function syncFieldHistoryPanelLayout() {
     const panel = document.getElementById("field-history-panel");
-    const analytics = document.getElementById("analytics-panel");
     if (!panel) return;
+    const sidebar = document.getElementById("sidebar");
+    const analytics = document.getElementById("analytics-panel");
+    const leftInset = sidebar?.classList.contains("open")
+        ? Math.round(sidebar.getBoundingClientRect().width) || 280
+        : 0;
     const rightInset = analytics?.classList.contains("open")
         ? Math.round(analytics.getBoundingClientRect().width)
         : 0;
+    panel.style.left = `${leftInset}px`;
     panel.style.right = `${rightInset}px`;
+}
+
+function syncMapFloatingButtons() {
+    const layersOpen = document.getElementById("layers-panel")?.classList.contains("open");
+    const filterOpen = document.getElementById("filter-panel")?.classList.contains("open");
+    document.getElementById("layers-toggle")?.classList.toggle("is-active", !!layersOpen);
+    document.getElementById("filter-toggle")?.classList.toggle("is-active", !!filterOpen);
+    document.getElementById("btn-measure")?.classList.toggle("is-active", isMeasuring);
+    document.getElementById("sidebar-toggle")?.classList.toggle("is-active", !!document.getElementById("sidebar")?.classList.contains("open"));
 }
 
 function renderFieldHistoryPanel(fieldId, fieldName) {
@@ -659,7 +753,12 @@ function showFieldContextMenu(screenX, screenY, fieldId, fieldName) {
 
 function ensureFieldContextMenu() {
     const existing = document.getElementById("field-context-menu");
-    if (existing && !existing.querySelector("[data-action='toggle-crop']")) {
+    if (existing && (
+        !existing.querySelector("[data-action='toggle-terrain']")
+        || !existing.querySelector(".field-context-menu-layers")
+        || !existing.querySelector(".field-context-menu-analytics")
+        || !existing.querySelector(".field-context-menu-map")
+    )) {
         existing.remove();
     }
     if (document.getElementById("field-context-menu")) return;
@@ -667,11 +766,21 @@ function ensureFieldContextMenu() {
     menu.id = "field-context-menu";
     menu.className = "field-context-menu hidden";
     menu.innerHTML = `
-        <div data-field-title style="padding:6px 12px 4px;font-size:12px;font-weight:600;color:#64748b;"></div>
-        <button type="button" data-action="show-history">Показать историю</button>
-        <button type="button" data-action="toggle-ndvi">Выбрать для NDVI</button>
-        <button type="button" data-action="toggle-crop">Выбрать для статистики культур</button>
-        <button type="button" data-action="toggle-soil">Выбрать для статистики почвы</button>
+        <div data-field-title class="field-context-menu-title"></div>
+        <div class="field-context-menu-section field-context-menu-map">
+            <div class="field-context-menu-label">Карта</div>
+            <button type="button" data-action="show-history">Показать историю</button>
+        </div>
+        <div class="field-context-menu-section field-context-menu-layers">
+            <div class="field-context-menu-label">Слои на карте</div>
+            <button type="button" data-action="toggle-ndvi">Выбрать для NDVI</button>
+            <button type="button" data-action="toggle-terrain">Выбрать для рельефа и уклона</button>
+        </div>
+        <div class="field-context-menu-section field-context-menu-analytics">
+            <div class="field-context-menu-label">Аналитика</div>
+            <button type="button" data-action="toggle-crop">Выбрать для статистики культур</button>
+            <button type="button" data-action="toggle-soil">Выбрать для статистики почвы</button>
+        </div>
     `;
     document.body.appendChild(menu);
 
@@ -684,6 +793,10 @@ function ensureFieldContextMenu() {
     });
     menu.querySelector("[data-action='toggle-ndvi']")?.addEventListener("click", () => {
         if (fieldContextMenuTargetId != null) toggleNdviFieldSelected(fieldContextMenuTargetId);
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='toggle-terrain']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) toggleAnalyticsCheckbox("terrain-filter-checkbox", fieldContextMenuTargetId);
         hideFieldContextMenu();
     });
     menu.querySelector("[data-action='toggle-crop']")?.addEventListener("click", () => {
@@ -704,7 +817,7 @@ function ensureFieldContextMenu() {
 }
 
 function onFieldLayerClick(e) {
-    if (isMeasuring || !e.features?.length) return;
+    if (window.geoFieldIntakeActive || window.geoImportPreviewActive || isMeasuring || !e.features?.length) return;
     const feature = e.features[0];
     const fieldId = getFeatureFieldId(feature);
     const properties = feature.properties || {};
@@ -755,31 +868,22 @@ function onFieldLayerClick(e) {
         ${latestRecordHtml}
     `;
 
-    const elevationBtn = document.createElement("button");
-    elevationBtn.type = "button";
-    elevationBtn.className = "field-popup-elevation-btn";
-    elevationBtn.textContent = "🏔️ Показать рельеф (SRTM)";
-    elevationBtn.style.cssText =
-        "margin-top:10px;width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;font-weight:600;color:#0f172a;";
-    elevationBtn.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        showFieldElevation(fieldId, elevationBtn);
-    });
-    popupRoot.appendChild(elevationBtn);
+    const actionsWrap = document.createElement("div");
+    actionsWrap.className = "field-popup-actions";
+    popupRoot.appendChild(actionsWrap);
 
-    const slopeBtn = document.createElement("button");
-    slopeBtn.type = "button";
-    slopeBtn.className = "field-popup-slope-btn";
-    slopeBtn.textContent = "📐 Показать уклон";
-    slopeBtn.style.cssText =
-        "margin-top:6px;width:100%;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;cursor:pointer;font-size:12px;font-weight:600;color:#0f172a;";
-    slopeBtn.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        showFieldSlope(fieldId, slopeBtn);
+    appendFieldPopupAction(actionsWrap, "🌿 Показать NDVI", "field-popup-ndvi-btn", async (btn) => {
+        setNdviFieldSelected(fieldId, true);
+        await showFieldNdvi(fieldId, btn);
     });
-    popupRoot.appendChild(slopeBtn);
+    appendFieldPopupAction(actionsWrap, "🏔️ Показать рельеф (SRTM)", "field-popup-elevation-btn", async (btn) => {
+        setTerrainFieldSelected(fieldId, true);
+        await showFieldElevation(fieldId, btn, { keepVisible: true });
+    });
+    appendFieldPopupAction(actionsWrap, "📐 Показать уклон", "field-popup-slope-btn", async (btn) => {
+        setTerrainFieldSelected(fieldId, true);
+        await showFieldSlope(fieldId, btn, { keepVisible: true });
+    });
 
     activeFieldPopup = new maplibregl.Popup({ closeOnClick: false })
         .setLngLat(e.lngLat)
@@ -798,8 +902,21 @@ function onFieldLayerClick(e) {
     activeFieldPopupFieldId = fieldId;
 }
 
+function appendFieldPopupAction(container, label, className, handler) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `field-popup-action-btn ${className}`;
+    btn.textContent = label;
+    btn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        handler(btn).catch(err => console.error("field popup action:", err));
+    });
+    container.appendChild(btn);
+}
+
 function onMapClickClearFieldSelection(e) {
-    if (isMeasuring || !map) return;
+    if (isMeasuring || window.geoFieldIntakeActive || window.geoImportPreviewActive || !map) return;
     const hit = map.queryRenderedFeatures(e.point, { layers: ["fields-fill"] });
     if (hit.length > 0) return;
     if (activeFieldPopup) {
@@ -814,7 +931,7 @@ function onMapClickClearFieldSelection(e) {
 }
 
 function onFieldLayerContextMenu(e) {
-    if (isMeasuring || !e.features?.length) return;
+    if (isMeasuring || window.geoFieldIntakeActive || window.geoImportPreviewActive || !e.features?.length) return;
     e.preventDefault();
     if (activeFieldPopup) {
         suppressPopupCloseHighlightReset = true;
@@ -893,6 +1010,8 @@ async function loadFields() {
 
         const data = await response.json();
         loadedFieldsGeoJson = data;
+        hasAnyFields = !!(data?.features?.length);
+        updateAnalyticsAvailability();
         updateTopAnalyticsStats(data);
 
         populateFilterFieldsList(data);
@@ -994,12 +1113,14 @@ function populateNdviFieldsChecklist(geojson) {
     const ndviBox = document.getElementById("ndvi-fields-checklist");
     const cropBox = document.getElementById("crop-fields-checklist");
     const soilBox = document.getElementById("soil-fields-checklist");
+    const terrainBox = document.getElementById("terrain-fields-checklist");
 
     if (!geojson || !geojson.features) return;
 
     ensureNdviFieldsToolbar();
     ensureCropFieldsToolbar();
     ensureSoilFieldsToolbar();
+    ensureTerrainFieldsToolbar();
 
     const fillContainer = (containerEl, cssClass, checkedByDefault) => {
         if (!containerEl) return;
@@ -1039,6 +1160,7 @@ function populateNdviFieldsChecklist(geojson) {
     fillContainer(ndviBox, "ndvi-filter-checkbox", false);
     fillContainer(cropBox, "crop-filter-checkbox", true);
     fillContainer(soilBox, "soil-filter-checkbox", true);
+    fillContainer(terrainBox, "terrain-filter-checkbox", false);
 
     initCropRecalculation();
     initSoilRecalculation();
@@ -1161,17 +1283,17 @@ function setupMeasureTool() {
     measureBtn?.addEventListener("click", () => {
         isMeasuring = !isMeasuring;
         if (isMeasuring) {
-            measureBtn.classList.add("active");
-            measureBtn.style.borderColor = "#f59e0b";
             if (measureTooltip) measureTooltip.style.display = "block";
             map.getCanvas().style.cursor = "crosshair";
             resetMeasure();
         } else {
             deactivateMeasure();
         }
+        syncMapFloatingButtons();
     });
 
     map.on("click", (e) => {
+        if (window.geoFieldIntakeActive) return;
         if (!isMeasuring) return;
         const coords = [e.lngLat.lng, e.lngLat.lat];
         measurePoints.push(coords);
@@ -1187,15 +1309,11 @@ function setupMeasureTool() {
 
 function deactivateMeasure() {
     isMeasuring = false;
-    const measureBtn = document.getElementById("btn-measure");
     const measureTooltip = document.getElementById("measure-tooltip");
-    if (measureBtn) {
-        measureBtn.classList.remove("active");
-        measureBtn.style.borderColor = "";
-    }
     if (measureTooltip) measureTooltip.style.display = "none";
     if (map) map.getCanvas().style.cursor = "";
     resetMeasure();
+    syncMapFloatingButtons();
 }
 
 function resetMeasure() {
@@ -1357,72 +1475,11 @@ function setupFilterControls() {
 // =====================================================
 // ИМПОРТ ДАННЫХ
 // =====================================================
-// =====================================================
-// МОДАЛКА ИМПОРТА ФАЙЛОВ
-// =====================================================
+// Логика импорта вынесена в отдельный модуль static/js/field-import.js
+// (загрузка ZIP с shapefile, предпросмотр на карте, сохранение в БД).
+// Здесь оставлена пустая заглушка, чтобы старый вызов из инициализации не падал.
 function setupImportModal() {
-    const modal = document.getElementById("import-modal");
-    const dropzone = document.getElementById("dropzone");
-    const fileInput = document.getElementById("file-input");
-    const preview = document.getElementById("import-preview");
-    const fileName = document.getElementById("selected-file-name");
-    const btnSubmit = document.getElementById("btn-submit-import");
-
-    const closeActions = [
-        document.getElementById("btn-close-import"),
-        document.getElementById("btn-cancel-import")
-    ];
-
-    closeActions.forEach(btn => {
-        btn?.addEventListener("click", () => {
-            modal?.classList.remove("open");
-            resetImportState();
-        });
-    });
-
-    dropzone?.addEventListener("click", () => fileInput?.click());
-
-    dropzone?.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        dropzone.classList.add("dragover");
-    });
-
-    dropzone?.addEventListener("dragleave", () => {
-        dropzone.classList.remove("dragover");
-    });
-
-    dropzone?.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropzone.classList.remove("dragover");
-        if (e.dataTransfer.files.length > 0) {
-            handleFileSelection(e.dataTransfer.files[0]);
-        }
-    });
-
-    fileInput?.addEventListener("change", (e) => {
-        if (e.target.files.length > 0) {
-            handleFileSelection(e.target.files[0]);
-        }
-    });
-
-    function handleFileSelection(file) {
-        if (fileName) fileName.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} Кб)`;
-        if (preview) preview.style.display = "block";
-        btnSubmit?.removeAttribute("disabled");
-    }
-
-    function resetImportState() {
-        if (fileInput) fileInput.value = "";
-        if (preview) preview.style.display = "none";
-        if (fileName) fileName.textContent = "—";
-        btnSubmit?.setAttribute("disabled", "true");
-    }
-
-    btnSubmit?.addEventListener("click", () => {
-        alert("Данные подготовлены для импорта.");
-        modal?.classList.remove("open");
-        resetImportState();
-    });
+    /* реализовано в field-import.js */
 }
 
 // =====================================================
@@ -1432,8 +1489,15 @@ function setupImportModal() {
 // БОКОВЫЕ ПАНЕЛИ И КНОПКИ ИНТЕРФЕЙСА
 // =====================================================
 function setupSidebarAndPanels() {
+    document.getElementById("sidebar-toggle")?.setAttribute("data-control", "sidebar");
+    document.getElementById("btn-measure")?.setAttribute("data-control", "measure");
+    document.getElementById("filter-toggle")?.setAttribute("data-control", "filter");
+    document.getElementById("layers-toggle")?.setAttribute("data-control", "layers");
+
     document.getElementById("sidebar-toggle")?.addEventListener("click", () => {
         document.getElementById("sidebar")?.classList.toggle("open");
+        syncFieldHistoryPanelLayout();
+        syncMapFloatingButtons();
     });
 
     document.getElementById("analytics-toggle")?.addEventListener("click", () => {
@@ -1451,10 +1515,12 @@ function setupSidebarAndPanels() {
 
     document.getElementById("layers-toggle")?.addEventListener("click", () => {
         document.getElementById("layers-panel")?.classList.toggle("open");
+        syncMapFloatingButtons();
     });
 
     document.getElementById("filter-toggle")?.addEventListener("click", () => {
         document.getElementById("filter-panel")?.classList.toggle("open");
+        syncMapFloatingButtons();
     });
 
     document.getElementById("btn-fit-bounds")?.addEventListener("click", () => {
@@ -1469,6 +1535,8 @@ function setupSidebarAndPanels() {
         });
         map.fitBounds(bounds, { padding: 80, duration: 1200 });
     });
+
+    syncMapFloatingButtons();
 }
 
 let analyticsResizeBound = false;
@@ -1571,18 +1639,42 @@ function setupLayerControls() {
         if (map.getLayer("fields-outline")) map.setLayoutProperty("fields-outline", "visibility", visibility);
     });
 
-    const ndviLayersToolbar = document.getElementById("ndvi-layers-toolbar");
-    ndviLayersToolbar?.querySelector("[data-action='all']")?.addEventListener("click", () => {
-        document.querySelectorAll("#dynamic-layers-container input[type='checkbox']").forEach(cb => {
-            cb.checked = true;
-            cb.dispatchEvent(new Event("change", { bubbles: true }));
-        });
+    ensureMapLayersToolbars();
+}
+
+function ensureMapLayersToolbars() {
+    bindMapLayersToolbar("ndvi-layers-toolbar", "dynamic-layers-container", refreshNdviLegendVisibility);
+    bindMapLayersToolbar("elevation-layers-toolbar", "dynamic-elevation-layers-container", refreshElevationLegendVisibility);
+    bindMapLayersToolbar("slope-layers-toolbar", "dynamic-slope-layers-container", refreshSlopeLegendVisibility);
+}
+
+function setMapLayersBlockVisibility(containerId, visible, onAfterChange) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.querySelectorAll(".filter-checkbox-row[id^='toggle-']").forEach(row => {
+        const layerId = row.id.slice("toggle-".length);
+        const checkbox = row.querySelector("input[type='checkbox']");
+        if (checkbox) checkbox.checked = visible;
+        if (map && map.getLayer(layerId)) {
+            map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+        }
     });
-    ndviLayersToolbar?.querySelector("[data-action='none']")?.addEventListener("click", () => {
-        document.querySelectorAll("#dynamic-layers-container input[type='checkbox']").forEach(cb => {
-            cb.checked = false;
-            cb.dispatchEvent(new Event("change", { bubbles: true }));
-        });
+    onAfterChange?.();
+}
+
+function bindMapLayersToolbar(toolbarId, containerId, onAfterChange) {
+    const toolbar = document.getElementById(toolbarId);
+    if (!toolbar || toolbar.dataset.bound === "1") return;
+    toolbar.dataset.bound = "1";
+    toolbar.querySelector("[data-action='all']")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMapLayersBlockVisibility(containerId, true, onAfterChange);
+    });
+    toolbar.querySelector("[data-action='none']")?.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setMapLayersBlockVisibility(containerId, false, onAfterChange);
     });
 }
 
@@ -1749,7 +1841,7 @@ function setupNdviCalculation() {
                     // Добавляем переключатель в панель слоев
                     addLayerToggleToMenu(
                         layerId,
-                        `NDVI Поле #${result.fieldId} (${result.data.actual_date})`,
+                        `NDVI ${getFieldDisplayName(result.fieldId)} (${result.data.actual_date})`,
                         {
                             containerId: "dynamic-layers-container",
                             blockId: "ndvi-layers-block",
@@ -1808,75 +1900,80 @@ function setupSlopeAnalyticsCard() {
     card.className = "analytics-card";
     card.id = "slope-card";
     card.innerHTML = `
-        <div class="card-title-mini">Уклоны (Slope)</div>
+        <div class="card-title-mini">Рельеф и уклон (SRTM)</div>
         <div class="filter-group">
-            <div class="filter-label">Используются выбранные поля и период из блока NDVI</div>
-            <button type="button" class="filter-btn primary w-100-pct" id="btn-calculate-slope">Рассчитать уклоны</button>
+            <div class="filter-label">Выберите поля</div>
+            <div class="analytics-checkbox-list" id="terrain-fields-checklist"></div>
         </div>
-        <div class="chart-container mt-2" id="slope-chart-box">
-            <svg viewBox="0 0 320 160" width="100%" height="150" class="chart-svg-visible">
-                <line x1="30" y1="10" x2="30" y2="130" stroke="#e2e8f0" stroke-width="1.5"></line>
-                <line x1="30" y1="130" x2="310" y2="130" stroke="#94a3b8" stroke-width="1.5"></line>
-                <path id="slope-path-line" d="" fill="none" stroke="#2563eb" stroke-width="3" stroke-linecap="round"></path>
-            </svg>
+        <div class="filter-group">
+            <button type="button" class="filter-btn primary w-100-pct" id="btn-show-elevation-map">🏔️ Показать рельеф на карте</button>
+            <button type="button" class="filter-btn w-100-pct mt-1" id="btn-show-slope-map">📐 Показать уклон на карте</button>
         </div>
-        <p class="muted font-sm m-0" id="slope-status-text">Нет данных</p>
+        <p class="muted font-sm m-0" id="slope-status-text">Выберите поля и нажмите кнопку</p>
     `;
-    // Карточка "Уклоны" должна стоять сразу под NDVI-трендом.
-    const ndviTrendCard = document.getElementById("trend-chart-box")?.closest(".analytics-card");
-    if (ndviTrendCard?.parentElement) {
-        ndviTrendCard.insertAdjacentElement("afterend", card);
+    // Карточка рельефа — сразу под калькулятором вегетации (с трендом NDVI).
+    const vegCalculatorCard = document.getElementById("btn-calculate-ndvi")?.closest(".analytics-card");
+    if (vegCalculatorCard?.parentElement) {
+        vegCalculatorCard.insertAdjacentElement("afterend", card);
     } else {
         vegTab.appendChild(card);
     }
 }
 
 // =====================================================
-// РАСЧЕТ И ЗАГРУЗКА ТРЕНДА УКЛОНОВ
+// РЕЛЬЕФ / УКЛОН: СЛОИ НА КАРТЕ ИЗ ПАНЕЛИ АНАЛИТИКИ
 // =====================================================
-function setupSlopeCalculation() {
-    const btn = document.getElementById("btn-calculate-slope");
-    btn?.addEventListener("click", async () => {
-        const selectedFieldIds = Array.from(document.querySelectorAll(".ndvi-filter-checkbox:checked")).map(cb => String(cb.value));
-        const startDate = document.getElementById("ndvi-start-date")?.value;
-        const endDate = document.getElementById("ndvi-end-date")?.value || startDate;
+function setupTerrainMapLayers() {
+    document.getElementById("btn-show-elevation-map")?.addEventListener("click", async () => {
+        const selectedFieldIds = getSelectedTerrainFieldIds();
         const status = document.getElementById("slope-status-text");
         if (selectedFieldIds.length === 0) {
-            if (status) status.textContent = "Выберите поля для расчёта уклонов";
-            return;
-        }
-        if (!startDate) {
-            if (status) status.textContent = "Укажите дату начала";
+            if (status) status.textContent = "Выберите поля в списке выше";
             return;
         }
         if (status) {
-            status.innerHTML = `<span class="loading-inline"><span class="loading-spinner"></span>Загрузка данных уклонов...</span>`;
+            status.innerHTML = `<span class="loading-inline"><span class="loading-spinner"></span>Подготовка рельефа...</span>`;
         }
-        // =====================================================
-        // SLOPE: ПРОГРЕВ ТАЙЛОВ ЧЕРЕЗ JAVA API
-        // =====================================================
-        // Прогрев slope-тайлов по выбранным полям перед запросом тренда (аналог потока NDVI).
-        const tilePromises = selectedFieldIds.map(fieldId =>
-            fetch(apiPath(`/get_slope_tiles_for_field?field_id=${fieldId}&date=${startDate}`), fetchOpts).catch(() => null)
-        );
-        await Promise.all(tilePromises);
-        // =====================================================
-        // SLOPE: ТРЕНД ЧЕРЕЗ JAVA API
-        // =====================================================
-        const trendQuery = `${selectedFieldIds.map(id => `field_id=${id}`).join("&")}&start_date=${startDate}&end_date=${endDate}`;
-        const trendResponse = await fetch(apiPath(`/get_slope_trend?${trendQuery}`), fetchOpts);
-        if (!trendResponse.ok) {
-            let message = "Не удалось получить тренд уклонов";
+        let loaded = 0;
+        for (const fieldId of selectedFieldIds) {
             try {
-                const err = await trendResponse.json();
-                message = err?.error || err?.detail || message;
-            } catch (_) { /* ignore parse errors */ }
-            if (status) status.textContent = message;
+                await showFieldElevation(fieldId, null);
+                loaded++;
+            } catch (e) {
+                console.error("btn-show-elevation-map:", e);
+            }
+        }
+        if (status) {
+            status.textContent = loaded
+                ? `Рельеф на карте: ${loaded} из ${selectedFieldIds.length}`
+                : "Не удалось загрузить рельеф";
+        }
+    });
+
+    document.getElementById("btn-show-slope-map")?.addEventListener("click", async () => {
+        const selectedFieldIds = getSelectedTerrainFieldIds();
+        const status = document.getElementById("slope-status-text");
+        if (selectedFieldIds.length === 0) {
+            if (status) status.textContent = "Выберите поля в списке выше";
             return;
         }
-        const trendData = await trendResponse.json();
-        updateSlopeChart(trendData.labels || [], trendData.data || []);
-        if (status) status.textContent = trendData.data?.length ? `Точек тренда: ${trendData.data.length}` : "Нет данных за период";
+        if (status) {
+            status.innerHTML = `<span class="loading-inline"><span class="loading-spinner"></span>Подготовка уклона...</span>`;
+        }
+        let loaded = 0;
+        for (const fieldId of selectedFieldIds) {
+            try {
+                await showFieldSlope(fieldId, null);
+                loaded++;
+            } catch (e) {
+                console.error("btn-show-slope-map:", e);
+            }
+        }
+        if (status) {
+            status.textContent = loaded
+                ? `Уклон на карте: ${loaded} из ${selectedFieldIds.length}`
+                : "Не удалось загрузить уклон";
+        }
     });
 }
 
@@ -1945,7 +2042,10 @@ function setupAnalyticsCardCollapsing() {
 // =====================================================
 async function prepareFieldTerrain(fieldId) {
     const idStr = String(fieldId);
-    const response = await fetch(pythonApiPath(`/prepare_elevation/${idStr}`), pythonFetchOpts);
+    // =====================================================
+    // РЕЛЬЕФ: ПОДГОТОВКА ЧЕРЕЗ JAVA API
+    // =====================================================
+    const response = await fetch(apiPath(`/prepare_elevation/${idStr}`), fetchOpts);
     if (!response.ok) {
         let detail = `HTTP ${response.status}`;
         try {
@@ -1973,8 +2073,15 @@ function removeRasterLayer(sourceId, layerId) {
     if (map.getSource(sourceId)) map.removeSource(sourceId);
 }
 
+function resolveTileUrlTemplate(template) {
+    if (!template || template.startsWith("http://") || template.startsWith("https://")) {
+        return template;
+    }
+    return apiPath(template);
+}
+
 function addRasterLayer(tileUrlTemplate, sourceId, layerId, fieldId) {
-    const source = { type: "raster", tiles: [tileUrlTemplate], tileSize: 256 };
+    const source = { type: "raster", tiles: [resolveTileUrlTemplate(tileUrlTemplate)], tileSize: 256 };
     const bounds = getFieldBoundsById(String(fieldId));
     if (bounds) source.bounds = bounds;
     map.addSource(sourceId, source);
@@ -2003,14 +2110,26 @@ function updateLayersBlockEmptyState(blockId, containerId) {
 }
 
 function layoutMapLegends() {
-    const elevLegend = document.getElementById("elevation-map-legend");
-    const ndviLegend = document.getElementById("ndvi-map-legend");
-    if (!elevLegend) return;
-    const ndviVisible = ndviLegend && !ndviLegend.classList.contains("ndvi-map-legend-hidden");
-    elevLegend.style.bottom = ndviVisible ? "108px" : "24px";
+    refreshMapLegendsPanel();
 }
 
-async function runTerrainButtonAction(buttonElement, originalLabel, action) {
+function refreshMapLegendsPanel() {
+    const panel = document.getElementById("map-legends-panel");
+    if (!panel) return;
+
+    const ndviVisible = activeNdviLayerIds.some(id => isLayerVisibleOnMap(id));
+    const elevVisible = activeElevationLayerIds.some(id => isLayerVisibleOnMap(id));
+    const slopeVisible = activeSlopeLayerIds.some(id => isLayerVisibleOnMap(id));
+
+    panel.classList.toggle("map-legends-panel-hidden", !ndviVisible && !elevVisible && !slopeVisible);
+    panel.querySelector("#map-legend-ndvi")?.classList.toggle("map-legend-section-hidden", !ndviVisible);
+    panel.querySelector("#map-legend-elevation")?.classList.toggle("map-legend-section-hidden", !elevVisible);
+    panel.querySelector("#map-legend-slope")?.classList.toggle("map-legend-section-hidden", !slopeVisible);
+    updateElevationLegendLabels();
+}
+
+async function runTerrainButtonAction(buttonElement, originalLabel, action, options = {}) {
+    const keepVisible = options.keepVisible === true;
     if (buttonElement) {
         buttonElement.disabled = true;
         buttonElement.textContent = "⏳ Подготовка данных...";
@@ -2018,10 +2137,17 @@ async function runTerrainButtonAction(buttonElement, originalLabel, action) {
     try {
         await action();
         if (buttonElement) {
-            buttonElement.textContent = "✅ Готово";
-            setTimeout(() => {
-                buttonElement.style.display = "none";
-            }, 2000);
+            buttonElement.textContent = keepVisible ? "✅ На карте" : "✅ Готово";
+            buttonElement.disabled = false;
+            if (keepVisible) {
+                window.setTimeout(() => {
+                    if (buttonElement.isConnected) buttonElement.textContent = originalLabel;
+                }, 2000);
+            } else {
+                window.setTimeout(() => {
+                    buttonElement.style.display = "none";
+                }, 2000);
+            }
         }
     } catch (error) {
         if (buttonElement) {
@@ -2033,9 +2159,78 @@ async function runTerrainButtonAction(buttonElement, originalLabel, action) {
 }
 
 /**
+ * NDVI для одного поля: добавляет в общую выборку и сразу рисует слой.
+ */
+async function showFieldNdvi(fieldId, buttonElement) {
+    if (!map) {
+        console.error("showFieldNdvi: карта не инициализирована");
+        return;
+    }
+
+    const idStr = String(fieldId);
+    const startDate = document.getElementById("ndvi-start-date")?.value;
+    if (!startDate) {
+        alert("Укажите дату начала в калькуляторе вегетации.");
+        return;
+    }
+
+    const originalLabel = buttonElement?.textContent || "🌿 Показать NDVI";
+    if (buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.textContent = "⏳ Загрузка NDVI...";
+    }
+
+    try {
+        const response = await fetch(
+            apiPath(`/get_ndvi_tiles_for_field?field_id=${idStr}&date=${startDate}`),
+            fetchOpts
+        );
+        if (!response.ok) {
+            let detail = `HTTP ${response.status}`;
+            try {
+                const errBody = await response.json();
+                detail = errBody.error || errBody.detail || detail;
+            } catch (_) { /* ignore */ }
+            throw new Error(detail);
+        }
+
+        const data = await response.json();
+        if (!data?.url) {
+            throw new Error("Нет NDVI-данных за выбранную дату");
+        }
+
+        const layerId = `ndvi-layer-${idStr}`;
+        addNdviLayer(data.url, layerId, idStr);
+        addLayerToggleToMenu(layerId, `NDVI ${getFieldDisplayName(idStr)} (${data.actual_date || startDate})`, {
+            containerId: "dynamic-layers-container",
+            blockId: "ndvi-layers-block",
+            onVisibilityChange: refreshNdviLegendVisibility
+        });
+        if (!activeNdviLayerIds.includes(layerId)) {
+            activeNdviLayerIds.push(layerId);
+        }
+
+        if (buttonElement) {
+            buttonElement.textContent = "✅ На карте";
+            buttonElement.disabled = false;
+            window.setTimeout(() => {
+                if (buttonElement.isConnected) buttonElement.textContent = originalLabel;
+            }, 2000);
+        }
+    } catch (error) {
+        if (buttonElement) {
+            buttonElement.disabled = false;
+            buttonElement.textContent = originalLabel;
+        }
+        console.error("showFieldNdvi:", error);
+        alert(`Не удалось загрузить NDVI: ${error.message}`);
+    }
+}
+
+/**
  * Lazy-loading рельефа: prepare → raster source → слой + пункт в «Слои карты».
  */
-async function showFieldElevation(fieldId, buttonElement) {
+async function showFieldElevation(fieldId, buttonElement, options = {}) {
     if (!map) {
         console.error("showFieldElevation: карта не инициализирована");
         return;
@@ -2056,17 +2251,15 @@ async function showFieldElevation(fieldId, buttonElement) {
                 activeElevationLayerIds.push(layerId);
             }
 
-            if (!document.getElementById(`toggle-${layerId}`)) {
-                addLayerToggleToMenu(layerId, `Рельеф поля #${idStr}`, {
-                    containerId: "dynamic-elevation-layers-container",
-                    blockId: "elevation-layers-block",
-                    rowClass: "dynamic-elevation-toggle",
-                    onVisibilityChange: refreshElevationLegendVisibility
-                });
-            }
+            addLayerToggleToMenu(layerId, `Рельеф: ${getFieldDisplayName(idStr)}`, {
+                containerId: "dynamic-elevation-layers-container",
+                blockId: "elevation-layers-block",
+                rowClass: "dynamic-elevation-toggle",
+                onVisibilityChange: refreshElevationLegendVisibility
+            });
 
             refreshElevationLegendVisibility();
-        });
+        }, options);
     } catch (error) {
         console.error("showFieldElevation:", error);
         alert(`Не удалось загрузить рельеф: ${error.message}`);
@@ -2076,7 +2269,7 @@ async function showFieldElevation(fieldId, buttonElement) {
 /**
  * Уклон: тот же prepare (elevation + slope.tif), тайлы /tiles/slope/...
  */
-async function showFieldSlope(fieldId, buttonElement) {
+async function showFieldSlope(fieldId, buttonElement, options = {}) {
     if (!map) {
         console.error("showFieldSlope: карта не инициализирована");
         return;
@@ -2102,15 +2295,14 @@ async function showFieldSlope(fieldId, buttonElement) {
                 activeSlopeLayerIds.push(layerId);
             }
 
-            if (!document.getElementById(`toggle-${layerId}`)) {
-                addLayerToggleToMenu(layerId, `Уклон поля #${idStr}`, {
-                    containerId: "dynamic-slope-layers-container",
-                    blockId: "slope-layers-block",
-                    rowClass: "dynamic-slope-toggle",
-                    onVisibilityChange: () => updateLayersBlockEmptyState("slope-layers-block", "dynamic-slope-layers-container")
-                });
-            }
-        });
+            addLayerToggleToMenu(layerId, `Уклон: ${getFieldDisplayName(idStr)}`, {
+                containerId: "dynamic-slope-layers-container",
+                blockId: "slope-layers-block",
+                rowClass: "dynamic-slope-toggle",
+                onVisibilityChange: refreshSlopeLegendVisibility
+            });
+            refreshSlopeLegendVisibility();
+        }, options);
     } catch (error) {
         console.error("showFieldSlope:", error);
         alert(`Не удалось загрузить уклон: ${error.message}`);
@@ -2146,7 +2338,20 @@ function addLayerToggleToMenu(layerId, label, options = {}) {
     const dynamicContainer = document.getElementById(containerId);
     if (!dynamicContainer) return;
 
-    if (document.getElementById(`toggle-${layerId}`)) {
+    const existingToggle = document.getElementById(`toggle-${layerId}`);
+    if (existingToggle) {
+        const checkbox = existingToggle.querySelector("input[type='checkbox']");
+        const span = existingToggle.querySelector("span");
+        if (span && label) span.textContent = label;
+        if (checkbox && !checkbox.checked) {
+            checkbox.checked = true;
+        }
+        if (map && map.getLayer(layerId)) {
+            map.setLayoutProperty(layerId, "visibility", "visible");
+        }
+        if (typeof options.onVisibilityChange === "function") {
+            options.onVisibilityChange();
+        }
         updateLayersBlockEmptyState(blockId, containerId);
         return;
     }
@@ -2197,29 +2402,48 @@ function clearNdviLayers() {
 }
 
 function refreshNdviLegendVisibility() {
-    const anyVisible = activeNdviLayerIds.some(id => isLayerVisibleOnMap(id));
-    setNdviLegendVisible(anyVisible);
-    layoutMapLegends();
+    refreshMapLegendsPanel();
 }
 
 // =====================================================
-// РЕЛЬЕФ: ЛЕГЕНДА НА КАРТЕ
+// ЛЕГЕНДЫ КАРТЫ (NDVI / РЕЛЬЕФ / УКЛОН) — ОДИН БЛОК
 // =====================================================
-function ensureElevationLegend() {
-    if (document.getElementById("elevation-map-legend")) return;
-    const legend = document.createElement("div");
-    legend.id = "elevation-map-legend";
-    legend.className = "elevation-map-legend elevation-map-legend-hidden";
-    legend.innerHTML = `
-        <div class="elevation-map-legend-title">Легенда рельефа (м)</div>
-        <div class="elevation-map-legend-bar"></div>
-        <div class="elevation-map-legend-labels" id="elevation-legend-labels">
-            <span id="elevation-legend-min">—</span>
-            <span id="elevation-legend-max">—</span>
-        </div>
-        <div class="elevation-map-legend-hint">Шкала по видимым слоям рельефа</div>
+function ensureMapLegendsPanel() {
+    document.getElementById("ndvi-map-legend")?.remove();
+    document.getElementById("elevation-map-legend")?.remove();
+    if (document.getElementById("map-legends-panel")) return;
+
+    const panel = document.createElement("div");
+    panel.id = "map-legends-panel";
+    panel.className = "map-legends-panel map-legends-panel-hidden";
+    panel.innerHTML = `
+        <section id="map-legend-ndvi" class="map-legend-section map-legend-section-hidden">
+            <div class="map-legend-title">NDVI</div>
+            <div class="map-legend-bar map-legend-bar-ndvi"></div>
+            <div class="map-legend-labels">
+                <span>0.0</span><span>0.2</span><span>0.4</span><span>0.6</span><span>0.8+</span>
+            </div>
+            <div class="map-legend-hint">Красный — низкая вегетация, зелёный — высокая</div>
+        </section>
+        <section id="map-legend-elevation" class="map-legend-section map-legend-section-hidden">
+            <div class="map-legend-title">Рельеф (SRTM), м</div>
+            <div class="map-legend-bar map-legend-bar-elevation"></div>
+            <div class="map-legend-labels" id="elevation-legend-labels">
+                <span id="elevation-legend-min">—</span>
+                <span id="elevation-legend-max">—</span>
+            </div>
+            <div class="map-legend-hint">Шкала по видимым слоям рельефа</div>
+        </section>
+        <section id="map-legend-slope" class="map-legend-section map-legend-section-hidden">
+            <div class="map-legend-title">Уклон (SRTM), °</div>
+            <div class="map-legend-bar map-legend-bar-slope"></div>
+            <div class="map-legend-labels">
+                <span>0°</span><span>5°</span><span>10°</span><span>15°+</span>
+            </div>
+            <div class="map-legend-hint">Жёлтый — пологий, красный — крутой</div>
+        </section>
     `;
-    document.body.appendChild(legend);
+    document.body.appendChild(panel);
 }
 
 function updateElevationLegendLabels() {
@@ -2248,47 +2472,29 @@ function updateElevationLegendLabels() {
 }
 
 function refreshElevationLegendVisibility() {
-    const anyVisible = activeElevationLayerIds.some(id => isLayerVisibleOnMap(id));
-    setElevationLegendVisible(anyVisible);
-    updateElevationLegendLabels();
-    layoutMapLegends();
+    refreshMapLegendsPanel();
 }
 
-function setElevationLegendVisible(visible) {
-    const legend = document.getElementById("elevation-map-legend");
-    if (!legend) return;
-    legend.classList.toggle("elevation-map-legend-hidden", !visible);
+function refreshSlopeLegendVisibility() {
+    refreshMapLegendsPanel();
 }
 
-// =====================================================
-// NDVI: ЛЕГЕНДА НА КАРТЕ
-// =====================================================
+function setNdviLegendVisible(_visible) {
+    refreshMapLegendsPanel();
+}
+
+function setElevationLegendVisible(_visible) {
+    refreshMapLegendsPanel();
+}
+
+/** @deprecated используйте ensureMapLegendsPanel */
 function ensureNdviLegend() {
-    if (document.getElementById("ndvi-map-legend")) return;
-    // Легенда добавляется в DOM один раз и просто показывается/скрывается при работе со слоями NDVI.
-    const legend = document.createElement("div");
-    legend.id = "ndvi-map-legend";
-    legend.className = "ndvi-map-legend ndvi-map-legend-hidden";
-    legend.innerHTML = `
-        <div class="ndvi-map-legend-title">Легенда NDVI</div>
-        <div class="ndvi-map-legend-bar"></div>
-        <div class="ndvi-map-legend-labels">
-            <span>0.0</span>
-            <span>0.2</span>
-            <span>0.4</span>
-            <span>0.6</span>
-            <span>0.8+</span>
-        </div>
-        <div class="ndvi-map-legend-hint">Красный: низкая вегетация, зеленый: высокая</div>
-    `;
-    document.body.appendChild(legend);
+    ensureMapLegendsPanel();
 }
 
-function setNdviLegendVisible(visible) {
-    const legend = document.getElementById("ndvi-map-legend");
-    if (!legend) return;
-    legend.classList.toggle("ndvi-map-legend-hidden", !visible);
-    layoutMapLegends();
+/** @deprecated используйте ensureMapLegendsPanel */
+function ensureElevationLegend() {
+    ensureMapLegendsPanel();
 }
 
 // =====================================================

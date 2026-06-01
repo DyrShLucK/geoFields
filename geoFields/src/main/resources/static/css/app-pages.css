@@ -63,8 +63,8 @@ h2 {
 .mt-2 { margin-top: 8px; }
 .mt-3 { margin-top: 12px; }
 .mt-4 { margin-top: 16px; }
-.mr-2 { margin-right: 8px; }
 .mb-3 { margin-bottom: 12px; }
+.mr-2 { margin-right: 8px; }
 
 /* Кнопки */
 .btn {
@@ -211,8 +211,343 @@ tr:last-child td {
     font-size: 13px;
 }
 
-.msg.ok { background: #ecfdf5; color: #047857; }
-.msg.err { background: #fef2f2; color: #b91c1c; }
+.msg.ok { background: #ecfdf5; color: #047857; border: 1px solid #bbf7d0; }
+.msg.err { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+/* Кабинет агронома */
+.geo-page-org--agronomist {
+    max-width: 920px;
+}
+
+body.geo-page-org--agronomist {
+    background: #f8fafc;
+    min-height: 100vh;
+    box-sizing: border-box;
+}
+
+.geo-page-org--agronomist .section-kicker {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.geo-page-org--agronomist .agronomist-hero {
+    background: #fff;
+    border-color: var(--border-color);
+    padding-top: 28px;
+}
+
+.geo-page-org--agronomist .agronomist-hero-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.geo-page-org--agronomist .agronomist-org-badge {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+    min-width: 200px;
+    color: var(--text-muted);
+}
+
+.geo-page-org--agronomist .agronomist-org-badge strong {
+    display: block;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.geo-page-org--agronomist .agronomist-field-select {
+    flex: 1;
+    min-width: 220px;
+}
+
+.geo-page-org--agronomist .agronomist-toolbar {
+    display: grid;
+    grid-template-columns: minmax(220px, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.geo-page-org--agronomist .agronomist-toolbar-btn {
+    min-width: 148px;
+    justify-self: end;
+}
+
+.geo-page-org--agronomist .agronomist-toolbar-btn:disabled {
+    opacity: 0.72;
+    cursor: wait;
+}
+
+.geo-page-org--agronomist .is-collapsed {
+    display: none !important;
+}
+
+.geo-page-org--agronomist .field-work-panel {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.geo-page-org--agronomist .history-wrap {
+    min-height: 132px;
+    overflow: visible;
+}
+
+.geo-page-org--agronomist .history-wrap.table-container {
+    overflow-x: visible;
+}
+
+.geo-page-org--agronomist .history-table {
+    width: 100%;
+    table-layout: auto;
+}
+
+.geo-page-org--agronomist .history-table th,
+.geo-page-org--agronomist .history-table td {
+    padding: 10px 12px;
+    white-space: normal;
+    word-break: break-word;
+    vertical-align: top;
+    line-height: 1.4;
+}
+
+.geo-page-org--agronomist .history-table th {
+    font-size: 12px;
+}
+
+.geo-page-org--agronomist .history-table td.history-actions {
+    width: 1%;
+    white-space: nowrap;
+}
+
+.geo-page-org--agronomist .history-actions-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 88px;
+}
+
+.geo-page-org--agronomist .history-table .btn {
+    height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+    width: 100%;
+}
+
+.geo-page-org--agronomist .history-status-row td {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 28px 16px;
+    white-space: normal;
+}
+
+.geo-page-org--agronomist .field-work-title {
+    margin: 0 0 12px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.geo-page-org--agronomist .field-work-title--form {
+    margin-top: 24px;
+}
+
+.geo-page-org--agronomist .history-empty {
+    padding: 20px 16px;
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: normal;
+    text-align: center;
+}
+
+.geo-page-org--agronomist .grid-inputs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.geo-page-org--agronomist .agronomist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.geo-page-org--agronomist .agronomist-grid .card {
+    margin-bottom: 0;
+    height: 100%;
+}
+
+.geo-page-org--agronomist .card-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.geo-page-org--agronomist .card-section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.geo-page-org--agronomist .card-section-icon--green {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+}
+
+.geo-page-org--agronomist .card-section-icon--amber {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.geo-page-org--agronomist .card-section-icon--blue {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+}
+
+.geo-page-org--agronomist .card-accent-green {
+    border-top: 3px solid var(--accent-green);
+}
+
+.geo-page-org--agronomist .card-accent-amber {
+    border-top: 3px solid #f59e0b;
+}
+
+.geo-page-org--agronomist .field-actions-box {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+}
+
+.geo-page-org--agronomist .field-actions-box p {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+}
+
+.geo-page-org--agronomist .field-actions-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 10px;
+    line-height: 1.45;
+}
+
+.geo-page-org--agronomist .form-label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+}
+
+.geo-page-org--agronomist .form-field select,
+.geo-page-org--agronomist .form-field input {
+    min-width: 0;
+}
+
+.geo-page-org--agronomist .form-field--wide {
+    grid-column: 1 / -1;
+}
+
+.geo-page-org--agronomist .form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+}
+
+.geo-page-org--agronomist .msg.ok {
+    background: #f8fafc;
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.geo-page-org--agronomist button.primary,
+.geo-page-org--agronomist .btn.primary {
+    background: #334155;
+    color: white;
+    border: none;
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.geo-page-org--agronomist button.primary:hover,
+.geo-page-org--agronomist .btn.primary:hover {
+    background: #1e293b;
+}
+
+.geo-page-org--agronomist button.danger,
+.geo-page-org--agronomist .btn.danger {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: white;
+    color: var(--danger-red);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    transition: background 0.2s ease;
+}
+
+.geo-page-org--agronomist button.danger:hover,
+.geo-page-org--agronomist .btn.danger:hover {
+    background: #fef2f2;
+}
+
+.geo-page-org--agronomist button:not(.primary):not(.danger) {
+    height: 38px;
+    padding: 0 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    background: white;
+    border: 1px solid var(--border-color);
+}
+
+.geo-page-org--agronomist #history-wrap table {
+    margin: 0;
+}
+
+@media (max-width: 720px) {
+    .geo-page-org--agronomist .agronomist-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .geo-page-org--agronomist .agronomist-toolbar-btn {
+        width: 100%;
+        justify-self: stretch;
+    }
+
+    .geo-page-org--agronomist .grid-inputs {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
 
 /* Стили токенов приглашений */
 .token {

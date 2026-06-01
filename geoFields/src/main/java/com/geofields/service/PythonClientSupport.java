@@ -44,5 +44,23 @@ public final class PythonClientSupport {
         }
         return result;
     }
+
+    /** Переписывает несколько URL-полей ответа Python на относительные пути прокси Java. */
+    public static Map<String, Object> rewritePathsInBody(
+            Map<String, Object> body,
+            String pythonBaseUrl,
+            Map<String, String> jsonFieldToPathPrefix) {
+        if (body == null) {
+            return Map.of();
+        }
+        Map<String, Object> result = new LinkedHashMap<>(body);
+        jsonFieldToPathPrefix.forEach((field, prefix) -> {
+            Object value = result.get(field);
+            if (value instanceof String s) {
+                result.put(field, rewriteProxyPath(s, prefix, pythonBaseUrl));
+            }
+        });
+        return result;
+    }
 }
 

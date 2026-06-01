@@ -80,8 +80,22 @@ public class NdviTileCacheService {
         return "tiles/" + hash.substring(0, 2) + "/" + hash + ".png";
     }
 
+    /** Ключ S3/MinIO для тайлов рельефа и уклона (SRTM). */
+    public String terrainCacheKey(String layer, String fieldId, int z, int x, int y) {
+        return "terrain/" + layer + "/" + fieldId + "/" + z + "/" + x + "/" + y + ".png";
+    }
+
     public static boolean isRealTilePng(byte[] png) {
         return png != null && png.length > EMPTY_PNG_MAX_BYTES;
+    }
+
+    /** Кэширует только непустые PNG (рельеф/уклон). */
+    public void storeIfReal(String key, byte[] png) {
+        if (!isRealTilePng(png)) {
+            log.debug("Terrain tile cache: skip empty PNG {} ({} bytes)", key, png != null ? png.length : 0);
+            return;
+        }
+        store(key, png);
     }
 
     public Optional<CachedTile> lookup(String key) {

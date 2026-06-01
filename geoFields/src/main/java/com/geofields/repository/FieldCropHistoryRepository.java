@@ -60,4 +60,10 @@ public interface FieldCropHistoryRepository {
     int deleteHistory(long historyId, long organizationId);
 
     Optional<Long> findCropIdIfExists(long cropId);
+
+    /** Ищет культуру по названию (без учёта регистра и краевых пробелов). */
+    Optional<Long> findCropIdByName(String cropName);
+
+    /** Добавляет культуру в справочник и возвращает её crop_id. */
+    long insertCrop(String cropName);
 }

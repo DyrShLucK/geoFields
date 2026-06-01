@@ -1,0 +1,153 @@
+openapi: 3.0.3
+info:
+  title: Python Elevation API (Agro Service Pro)
+  description: |
+    Спецификация Python-сервиса рельефа и уклона по SRTM.
+
+    Используется Java backend как outbound API для:
+    - подготовки elevation.tif и slope.tif по контуру поля;
+    - выдачи PNG-тайлов рельефа и уклона на карту.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8001
+    description: Локальный Python-сервис аналитики
+
+tags:
+  - name: Elevation
+    description: Рельеф и уклон по SRTM
+  - name: ElevationTiles
+    description: PNG-тайлы рельефа и уклона
+
+paths:
+  /prepare_elevation/{field_id}:
+    get:
+      tags: [Elevation]
+      summary: Подготовить рельеф и уклон для поля
+      operationId: prepareElevation
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 1
+      responses:
+        "200":
+          description: Файлы готовы, возвращены URL шаблоны тайлов
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrepareElevationResponse"
+        "404":
+          description: Поле не найдено
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Исходный SRTM недоступен
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Ошибка подготовки растра
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /tiles/elevation/{field_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [ElevationTiles]
+      summary: PNG-тайл рельефа
+      operationId: getElevationTile
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл
+
+  /tiles/slope/{field_id}/{z}/{x}/{y}.png:
+    get:
+      tags: [ElevationTiles]
+      summary: PNG-тайл уклона (SRTM)
+      operationId: getTerrainSlopeTile
+      parameters:
+        - name: field_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: z
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: x
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: y
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: PNG тайл
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+        "204":
+          description: Пустой тайл
+
+components:
+  schemas:
+    PrepareElevationResponse:
+      type: object
+      required: [status, tile_url, slope_tile_url]
+      properties:
+        status:
+          type: string
+          example: ready
+        tile_url:
+          type: string
+          example: "http://localhost:8001/tiles/elevation/1/{z}/{x}/{y}.png"
+        slope_tile_url:
+          type: string
+          example: "http://localhost:8001/tiles/slope/1/{z}/{x}/{y}.png"
+        elevation_min:
+          type: number
+          format: double
+        elevation_max:
+          type: number
+          format: double
+
+    ErrorResponse:
+      type: object
+      properties:
+        detail:
+          type: string

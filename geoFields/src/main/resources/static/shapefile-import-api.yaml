@@ -145,15 +145,6 @@ components:
         cropYear:
           type: integer
           nullable: true
-        analyticsDate:
-          type: string
-          nullable: true
-        ndviUrl:
-          type: string
-          nullable: true
-        ndviCreatedAt:
-          type: string
-          nullable: true
 
     CropItem:
       type: object

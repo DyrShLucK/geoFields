@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
     <title>О системе — GeoFields</title>
     <!-- Подключаем шрифт Inter с экранированием &amp; для Thymeleaf -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet" />
@@ -136,8 +137,10 @@
             </p>
             <div class="cta-group">
                 <a th:href="@{/login}" class="btn-cta primary">Войти в личный кабинет</a>
-                <a th:href="@{/register}" class="btn-cta secondary">Подать заявку на регистрацию</a>
             </div>
+            <p class="hero-desc" th:if="${param.logout != null}" style="margin-top: 16px; color: #059669; font-weight: 500;">
+                Сессия завершена. Для продолжения работы войдите в систему.
+            </p>
         </section>
 
         <!-- Фичи с современными SVG вместо старых эмодзи -->

@@ -41,7 +41,7 @@ x-python-volumes: &python-volumes
 services:
   minio:
     image: minio/minio:latest
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-minio
     restart: unless-stopped
     environment:
@@ -61,7 +61,7 @@ services:
 
   db:
     image: postgis/postgis:17-3.5
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-db
     restart: unless-stopped
     environment:
@@ -82,7 +82,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-redis
     restart: unless-stopped
     ports:
@@ -129,7 +129,7 @@ services:
 
   app:
     image: eclipse-temurin:21-jre-alpine
-    platform: linux/amd64
+    #platform: linux/amd64
     container_name: geofields-app
     restart: unless-stopped
     depends_on:

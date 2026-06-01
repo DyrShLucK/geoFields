@@ -15,7 +15,6 @@ java {
 }
 
 repositories {
-    maven { url "https://repo.osgeo.org/repository/release/"}
     mavenCentral()
 }
 
@@ -38,15 +37,6 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
     testRuntimeOnly 'com.h2database:h2'
-
-    // GeoTools для работы с шейп-файлами
-    implementation group: 'org.geotools', name: 'gt-epsg-hsql', version: '30.0'
-    implementation group: 'org.geotools', name: 'gt-referencing', version: '30.0'
-    implementation group: 'org.geotools', name: 'gt-main', version: '30.0'
-    implementation group: 'org.geotools', name: 'gt-shapefile', version: '30.0'
-    implementation group: 'org.geotools', name: 'gt-geojson', version: '30.0'
-    implementation group: 'org.geotools', name: 'gt-api', version: '30.0'
-
 
     // Jackson для JSON
     implementation 'com.fasterxml.jackson.core:jackson-databind'

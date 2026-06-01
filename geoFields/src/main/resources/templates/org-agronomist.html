@@ -4,114 +4,129 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>История посевов — агроном</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
 </head>
-<body class="geo-page-org">
-<div class="card">
-    <h1>История посевов по полям</h1>
-    <p>Организация: <strong id="org-name">…</strong> · <span id="user-label">…</span></p>
-    <p><a th:href="@{/}">На карту</a></p>
+<body class="geo-page-org geo-page-org--agronomist">
+
+<div class="card agronomist-hero">
+    <div class="agronomist-hero-head">
+        <div>
+            <span class="section-kicker">Кабинет агронома</span>
+            <h1>История посевов по полям</h1>
+            <p class="muted mb-3">Ведение севооборота, учёт урожайности и архивация устаревших контуров. Активные поля отображаются на карте; устаревшие скрываются, но данные в базе сохраняются.</p>
+        </div>
+        <div class="agronomist-org-badge">
+            <strong id="org-name">…</strong>
+            <span id="user-label">…</span>
+        </div>
+    </div>
+    <div class="nav-links">
+        <a th:href="@{/}" class="btn-link">← Вернуться на карту</a>
+    </div>
     <div id="banner"></div>
 </div>
 
 <div class="card">
-    <h2>Выбор поля</h2>
-    <p style="font-size: 14px; color: #444;">В списке только активные поля, по которым уже есть записи в истории посевов. Устаревшие поля скрываются из выдачи, но история по ним в БД сохраняется.</p>
-    <div class="row">
-        <label for="field-select" style="margin-right: 8px;">Поле:</label>
-        <select id="field-select" style="min-width: 220px;">
-            <option value="">— выберите поле —</option>
-        </select>
-        <button type="button" class="primary" id="btn-load-history">Показать историю</button>
+    <div class="card-section-title">
+        <span class="card-section-icon card-section-icon--green">🌾</span>
+        <h2>Активное поле и севооборот</h2>
     </div>
-    <div id="field-actions" style="display: none; margin-top: 12px;">
-        <p style="margin: 0 0 8px 0;">Выбрано поле: <strong id="selected-field-name">—</strong></p>
-        <div class="row">
-            <button type="button" class="danger" id="btn-mark-obsolete">Пометить поле как устаревшее</button>
+    <p class="muted font-sm mb-3">Выберите поле — таблица посевов и форма добавления записи появятся ниже.</p>
+    <div class="row agronomist-toolbar items-center align-end">
+        <div class="form-field agronomist-field-select">
+            <label class="form-label" for="field-select">Поле</label>
+            <select id="field-select">
+                <option value="">— выберите поле —</option>
+            </select>
         </div>
-        <p style="font-size: 13px; color: #666; margin-top: 8px;">
-            После перевода в статус «устаревшее» поле исчезнет из списков и карты, но его история останется в базе.
-        </p>
+        <button type="button" class="btn primary agronomist-toolbar-btn" id="btn-load-history">Показать</button>
+    </div>
+
+    <div id="field-actions" class="field-actions-box is-collapsed">
+        <p>Выбрано поле: <strong id="selected-field-name">—</strong></p>
+        <button type="button" class="btn danger" id="btn-mark-obsolete">Пометить поле как устаревшее</button>
+        <p class="field-actions-hint">Поле исчезнет с карты и из списков активных. История посевов останется в базе.</p>
+    </div>
+
+    <div id="field-work-panel" class="field-work-panel is-collapsed">
+        <h3 id="history-section-title" class="field-work-title">Севооборот</h3>
+        <div id="history-wrap" class="table-container history-wrap"></div>
+
+        <h3 class="field-work-title field-work-title--form" id="form-title">Новая запись посева</h3>
+        <div class="grid-inputs">
+            <div class="form-field">
+                <label class="form-label" for="form-crop">Культура</label>
+                <select id="form-crop"></select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-year">Год поля (crop_year)</label>
+                <input type="number" id="form-year" class="form-input" min="1900" max="2100" step="1">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-sowing">Дата посева</label>
+                <input type="date" id="form-sowing" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-harvest">Дата уборки</label>
+                <input type="date" id="form-harvest" class="form-input">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-sown-ha">Засеяно, га</label>
+                <input type="number" id="form-sown-ha" class="form-input" step="0.01">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-harvest-ha">Убрано, га</label>
+                <input type="number" id="form-harvest-ha" class="form-input" step="0.01">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-actual-yield">Урожайность (факт)</label>
+                <input type="number" id="form-actual-yield" class="form-input" step="0.01">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-total-yield">Валовый сбор</label>
+                <input type="number" id="form-total-yield" class="form-input" step="0.01">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-planned-yield">План урожайности</label>
+                <input type="number" id="form-planned-yield" class="form-input" step="0.01">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-forecast-yield">Прогноз</label>
+                <input type="number" id="form-forecast-yield" class="form-input" step="0.01">
+            </div>
+            <div class="form-field form-field--wide">
+                <label class="form-label" for="form-source">Источник данных</label>
+                <input type="text" id="form-source" class="form-input" maxlength="50">
+            </div>
+            <div class="form-field form-field--wide">
+                <label class="form-label" for="form-details">Детали посева</label>
+                <input type="text" id="form-details" class="form-input" maxlength="100">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn primary" id="btn-save-record">Сохранить</button>
+            <button type="button" class="btn" id="btn-cancel-edit">Отмена</button>
+            <button type="button" class="btn primary" id="btn-new-record">Новая запись</button>
+        </div>
     </div>
 </div>
 
 <div class="card">
-    <h2>Устаревшие поля</h2>
-    <p style="font-size: 14px; color: #444;">Здесь можно посмотреть скрытые поля и вернуть их обратно в активные.</p>
-    <div class="row">
-        <label for="obsolete-field-select" style="margin-right: 8px;">Устаревшее поле:</label>
-        <select id="obsolete-field-select" style="min-width: 220px;">
-            <option value="">— выберите поле —</option>
-        </select>
-        <button type="button" class="primary" id="btn-restore-field">Вернуть в активные</button>
+    <div class="card-section-title">
+        <span class="card-section-icon card-section-icon--amber">📦</span>
+        <h2>Устаревшие поля</h2>
     </div>
-</div>
-
-<div class="card" id="history-card" style="display: none;">
-    <h2>Записи по выбранному полю</h2>
-    <div id="history-wrap"></div>
-</div>
-
-<div class="card" id="form-card" style="display: none;">
-    <h2 id="form-title">Новая запись</h2>
-    <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: flex-end;">
-        <div>
-            <label for="form-crop">Культура</label><br>
-            <select id="form-crop"></select>
+    <p class="muted font-sm mb-3">Скрытые контуры, которые больше не участвуют в аналитике и на карте.</p>
+    <div class="row agronomist-toolbar items-center align-end">
+        <div class="form-field agronomist-field-select">
+            <label class="form-label" for="obsolete-field-select">Устаревшее поле</label>
+            <select id="obsolete-field-select">
+                <option value="">— выберите поле —</option>
+            </select>
         </div>
-        <div>
-            <label for="form-year">Год поля (crop_year)</label><br>
-            <input type="number" id="form-year" min="1900" max="2100" step="1" style="width: 100px;">
-        </div>
-        <div>
-            <label for="form-sowing">Дата посева</label><br>
-            <input type="date" id="form-sowing">
-        </div>
-        <div>
-            <label for="form-harvest">Дата уборки</label><br>
-            <input type="date" id="form-harvest">
-        </div>
-    </div>
-    <div class="row" style="flex-wrap: wrap; gap: 12px; margin-top: 12px; align-items: flex-end;">
-        <div>
-            <label for="form-sown-ha">Засеяно, га</label><br>
-            <input type="number" id="form-sown-ha" step="0.01" style="width: 120px;">
-        </div>
-        <div>
-            <label for="form-harvest-ha">Убрано, га</label><br>
-            <input type="number" id="form-harvest-ha" step="0.01" style="width: 120px;">
-        </div>
-        <div>
-            <label for="form-actual-yield">Урожайность (факт)</label><br>
-            <input type="number" id="form-actual-yield" step="0.01" style="width: 120px;">
-        </div>
-        <div>
-            <label for="form-total-yield">Валовый сбор</label><br>
-            <input type="number" id="form-total-yield" step="0.01" style="width: 120px;">
-        </div>
-    </div>
-    <div class="row" style="flex-wrap: wrap; gap: 12px; margin-top: 12px; align-items: flex-end;">
-        <div>
-            <label for="form-planned-yield">План урожайности</label><br>
-            <input type="number" id="form-planned-yield" step="0.01" style="width: 120px;">
-        </div>
-        <div>
-            <label for="form-forecast-yield">Прогноз</label><br>
-            <input type="number" id="form-forecast-yield" step="0.01" style="width: 120px;">
-        </div>
-        <div style="flex: 1; min-width: 200px;">
-            <label for="form-source">Источник данных</label><br>
-            <input type="text" id="form-source" maxlength="50" style="width: 100%; max-width: 320px;">
-        </div>
-    </div>
-    <div style="margin-top: 12px;">
-        <label for="form-details">Детали посева</label><br>
-        <input type="text" id="form-details" maxlength="100" style="width: 100%; max-width: 560px;">
-    </div>
-    <div class="row" style="margin-top: 16px;">
-        <button type="button" class="primary" id="btn-save-record">Сохранить</button>
-        <button type="button" id="btn-cancel-edit">Отмена</button>
-        <button type="button" class="primary" id="btn-new-record">Новая запись</button>
+        <button type="button" class="btn primary agronomist-toolbar-btn" id="btn-restore-field">Вернуть в активные</button>
     </div>
 </div>
 

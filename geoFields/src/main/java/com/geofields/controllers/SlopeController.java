@@ -2,6 +2,7 @@ package com.geofields.controllers;
 
 import com.geofields.service.RequestValidationService;
 import com.geofields.service.SlopePythonClient;
+import com.geofields.support.web.ValidationResponses;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,14 +34,14 @@ public class SlopeController {
             @RequestParam String field_id,
             @RequestParam String date) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
-        if (org.isError()) return castError(org.errorResponse());
+        if (org.isError()) return ValidationResponses.castError(org.errorResponse());
         RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
-        if (field.isError()) return castError(field.errorResponse());
+        if (field.isError()) return ValidationResponses.castError(field.errorResponse());
         RequestValidationService.ValidationResult<Void> fieldAccess =
                 validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
-        if (fieldAccess.isError()) return castError(fieldAccess.errorResponse());
+        if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
         RequestValidationService.ValidationResult<java.time.LocalDate> targetDate = validationService.parseDate(date);
-        if (targetDate.isError()) return castError(targetDate.errorResponse());
+        if (targetDate.isError()) return ValidationResponses.castError(targetDate.errorResponse());
         try {
             return ResponseEntity.ok(slopePythonClient.getTilesForField(field.value(), targetDate.value().toString()));
         } catch (RestClientResponseException ex) {
@@ -58,18 +59,18 @@ public class SlopeController {
             @RequestParam String start_date,
             @RequestParam String end_date) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
-        if (org.isError()) return castError(org.errorResponse());
+        if (org.isError()) return ValidationResponses.castError(org.errorResponse());
         RequestValidationService.ValidationResult<List<Long>> fields = validationService.parseFieldIds(rawFieldIds);
-        if (fields.isError()) return castError(fields.errorResponse());
+        if (fields.isError()) return ValidationResponses.castError(fields.errorResponse());
         List<Long> fieldIds = fields.value();
         for (Long fieldId : fieldIds) {
             RequestValidationService.ValidationResult<Void> fieldAccess =
                     validationService.ensureFieldBelongsToOrganization(fieldId, org.value(), true);
-            if (fieldAccess.isError()) return castError(fieldAccess.errorResponse());
+            if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
         }
         RequestValidationService.ValidationResult<RequestValidationService.DateRange> range =
                 validationService.parseDateRange(start_date, end_date);
-        if (range.isError()) return castError(range.errorResponse());
+        if (range.isError()) return ValidationResponses.castError(range.errorResponse());
         try {
             return ResponseEntity.ok(slopePythonClient.getTrend(
                     fieldIds,
@@ -113,11 +114,6 @@ public class SlopeController {
         } catch (ResourceAccessException ex) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static <T> ResponseEntity<T> castError(ResponseEntity<?> errorResponse) {
-        return (ResponseEntity<T>) errorResponse;
     }
 }
 

@@ -3,51 +3,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Регистрация</title>
-    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
-    <style>
-        body.geo-page-auth .wrap button {
-            background: #27ae60;
-        }
-    </style>
+    <title>Регистрация — GeoFields</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/auth.css}">
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
 </head>
-<body class="geo-page-auth">
-<div class="wrap">
-    <h1>Регистрация</h1>
-    <div class="err" th:if="${errorMessage != null}" th:text="${errorMessage}"></div>
-    <form method="post" th:action="@{/register}" id="register-form">
+<body class="auth-body">
+<div class="auth-container auth-container--register">
+    <div class="auth-header">
+        <div class="auth-logo">
+            <img th:src="@{/images/logo.png}" alt="GeoFields" class="logo-image"/>
+        </div>
+        <h1>Создание аккаунта</h1>
+        <p class="auth-subtitle">Заполните данные по приглашению вашей организации</p>
+    </div>
+
+    <div class="alert alert-danger" th:if="${errorMessage != null}" th:text="${errorMessage}"></div>
+
+    <form method="post" th:action="@{/register}" id="register-form" class="auth-form">
         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
         <input type="hidden" id="inviteToken" name="inviteToken" th:value="${inviteToken}"/>
-        <label for="lastName">Фамилия</label>
-        <input id="lastName" name="lastName" required maxlength="100" th:value="${lastName}" autocomplete="family-name" />
 
-        <label for="firstName">Имя</label>
-        <input id="firstName" name="firstName" required maxlength="100" th:value="${firstName}" autocomplete="given-name" />
+        <div class="form-row">
+            <div class="input-group">
+                <label for="lastName">Фамилия</label>
+                <input id="lastName" name="lastName" type="text" required maxlength="100"
+                       th:value="${lastName}" autocomplete="family-name" placeholder="Иванов"/>
+            </div>
+            <div class="input-group">
+                <label for="firstName">Имя</label>
+                <input id="firstName" name="firstName" type="text" required maxlength="100"
+                       th:value="${firstName}" autocomplete="given-name" placeholder="Иван"/>
+            </div>
+        </div>
 
-        <label for="middleName">Отчество</label>
-        <input id="middleName" name="middleName" maxlength="100" th:value="${middleName}" autocomplete="additional-name" />
+        <div class="input-group">
+            <label for="middleName">Отчество</label>
+            <input id="middleName" name="middleName" type="text" maxlength="100"
+                   th:value="${middleName}" autocomplete="additional-name" placeholder="Необязательно"/>
+        </div>
 
-        <label for="login">Логин</label>
-        <input id="login" name="login" required minlength="3" maxlength="100" th:value="${login}" autocomplete="username" />
+        <div class="input-group">
+            <label for="login">Логин</label>
+            <input id="login" name="login" type="text" required minlength="3" maxlength="100"
+                   th:value="${login}" autocomplete="username" placeholder="ivanov"/>
+        </div>
 
-        <label for="email">Электронная почта</label>
-        <input id="email" name="email" type="email" required maxlength="255" th:value="${email}" autocomplete="email" />
+        <div class="input-group">
+            <label for="email">Электронная почта</label>
+            <input id="email" name="email" type="email" required maxlength="255"
+                   th:value="${email}" autocomplete="email" placeholder="name@company.ru"/>
+        </div>
 
-        <label for="password">Пароль</label>
-        <input id="password" name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+        <div class="form-row">
+            <div class="input-group">
+                <label for="password">Пароль</label>
+                <input id="password" name="password" type="password" required minlength="8" maxlength="128"
+                       autocomplete="new-password" placeholder="••••••••"/>
+            </div>
+            <div class="input-group">
+                <label for="passwordConfirm">Повтор пароля</label>
+                <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" maxlength="128"
+                       autocomplete="new-password" placeholder="••••••••"/>
+            </div>
+        </div>
 
-        <label for="passwordConfirm">Повтор пароля</label>
-        <input id="passwordConfirm" name="passwordConfirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password" />
+        <p class="auth-hint">Минимум 8 символов. После регистрации заявку одобрит менеджер организации.</p>
 
-        <button type="submit">Создать аккаунт</button>
+        <button type="submit" class="auth-btn">Создать аккаунт</button>
     </form>
-    <script>
-        (function () {
-            var params = new URLSearchParams(window.location.search);
-            var r = params.get('ref');
-            var hidden = document.getElementById('inviteToken');
-            if (r && hidden && !hidden.value) hidden.value = r;
-        })();
+
+    <div class="auth-footer">
+        Уже есть аккаунт?<a th:href="@{/login}">Войти</a>
+    </div>
+</div>
+
+<script>
+    (function () {
+        var params = new URLSearchParams(window.location.search);
+        var r = params.get('ref');
+        var hidden = document.getElementById('inviteToken');
+        if (r && hidden && !hidden.value) hidden.value = r;
+
         document.getElementById('register-form').addEventListener('submit', function (e) {
             var p = document.getElementById('password').value;
             var c = document.getElementById('passwordConfirm').value;
@@ -66,10 +103,7 @@
                 alert('Укажите фамилию и имя.');
             }
         });
-    </script>
-    <div class="links">
-        Уже есть аккаунт? <a th:href="@{/login}">Войти</a>
-    </div>
-</div>
+    })();
+</script>
 </body>
 </html>

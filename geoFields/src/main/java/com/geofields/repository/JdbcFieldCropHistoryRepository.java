@@ -58,7 +58,7 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
                    fc.sowing_details,
                    fc.crop_year
             FROM field_crops fc
-            INNER JOIN crops c ON c.crop_id = fc.crop_id
+            LEFT JOIN crops c ON c.crop_id = fc.crop_id
             WHERE fc.field_id = ? AND fc.organization_id = ?
             ORDER BY fc.crop_year NULLS LAST, fc.history_id
             """;
@@ -89,6 +89,19 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
     /** Проверяет наличие культуры в справочнике crops. */
     private static final String CROP_EXISTS = """
             SELECT crop_id FROM crops WHERE crop_id = ? LIMIT 1
+            """;
+
+    /** Ищет культуру по названию без учёта регистра и краевых пробелов. */
+    private static final String FIND_CROP_BY_NAME = """
+            SELECT crop_id FROM crops
+            WHERE LOWER(TRIM(crop_name)) = LOWER(TRIM(?))
+            ORDER BY crop_id
+            LIMIT 1
+            """;
+
+    /** Добавляет культуру в справочник. */
+    private static final String INSERT_CROP = """
+            INSERT INTO crops (crop_name) VALUES (?)
             """;
 
     /** Добавляет запись истории посева (севооборот) для поля. */
@@ -285,6 +298,34 @@ public class JdbcFieldCropHistoryRepository implements FieldCropHistoryRepositor
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
         }
+    }
+
+    @Override
+    public Optional<Long> findCropIdByName(String cropName) {
+        if (cropName == null || cropName.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            Long id = jdbcTemplate.queryForObject(FIND_CROP_BY_NAME, Long.class, cropName);
+            return Optional.ofNullable(id);
+        } catch (EmptyResultDataAccessException e) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public long insertCrop(String cropName) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(INSERT_CROP, new String[]{"crop_id"});
+            ps.setString(1, cropName.trim());
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        if (key == null) {
+            throw new IllegalStateException("Не удалось получить crop_id после INSERT");
+        }
+        return key.longValue();
     }
 
     private FieldCropHistoryRow mapHistoryRow(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {

@@ -19,7 +19,11 @@ import java.util.Map;
 @Component
 public class FieldGeoJsonAssembler {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    public FieldGeoJsonAssembler(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     public FieldFeatureCollectionDto toFeatureCollection(List<FieldHistoryRow> rows) {
         List<FieldFeatureDto> features = buildFeatures(rows);
