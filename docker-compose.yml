@@ -11,6 +11,7 @@ x-app-environment: &app-environment
   REDIS_PASSWORD: ""
   SERVER_PORT: 8080
   NDVI_PYTHON_BASE_URL: http://python-processor:8000
+  GEOJSON_AGENT_BASE_URL: http://geojson-agent:6767
   S3_ENDPOINT: http://minio:9000
   S3_ACCESS_KEY: minioadmin
   S3_SECRET_KEY: minioadmin
@@ -37,6 +38,15 @@ x-python-environment: &python-environment
 x-python-volumes: &python-volumes
   - ./python-service:/app
   - ./shared-data:/app/storage
+
+x-geojson-agent-environment: &geojson-agent-environment
+  OLLAMA_BASE_URL: http://ollama:11434
+  MODEL_NAME: qwen2.5:14b
+
+x-geojson-agent-volumes: &geojson-agent-volumes
+  - ./geojson-agent/data:/app/data:ro
+  - ./geojson-agent/output:/app/output
+  - ./geojson-agent/temp:/app/temp
 
 services:
   minio:
@@ -168,7 +178,58 @@ services:
       scene-indexer:
         condition: service_completed_successfully
 
+  # --- AI: Ollama (LLM) + geojson-agent (shapefile → GeoJSON) ---
+  # Модель qwen2.5:14b скачивается при первом старте ollama (volume ollama_data).
+  # Без GPU закомментируйте блок deploy / gpus — Ollama будет на CPU.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: geofields-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_MODEL: qwen2.5:14b
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./docker/ollama/entrypoint.sh:/entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/entrypoint.sh"]
+    gpus: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "show", "qwen2.5:14b"]
+      interval: 30s
+      timeout: 15s
+      retries: 60
+      start_period: 1800s
+
+  geojson-agent:
+    build:
+      context: ./geojson-agent
+      dockerfile: Dockerfile
+    container_name: geofields-geojson-agent
+    restart: unless-stopped
+    ports:
+      - "6767:6767"
+    environment: *geojson-agent-environment
+    volumes: *geojson-agent-volumes
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6767/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
 volumes:
   postgres_data:
   redis_data:
   minio_data:
+  ollama_data:

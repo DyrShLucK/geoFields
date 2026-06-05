@@ -8,25 +8,23 @@ jobs: Dict[str, Dict] = {}
 
 def process_job(job_id: str, upload_dir: Path, output_dir: Path, ollama_url: str, model: str):
     """Фоновая обработка: вызывает основную логику из main.py"""
+    input_path = upload_dir / job_id
     try:
         jobs[job_id]["status"] = JobStatus.PROCESSING
         jobs[job_id]["progress"] = "Извлечение файлов..."
 
-        # 1. Распаковка если был ZIP
-        input_path = upload_dir / f"{job_id}"
-        input_path.mkdir(exist_ok=True)
-        
-        uploaded_file = upload_dir / f"{job_id}.zip"
-        if uploaded_file.exists():
+        # 1. Распаковка ZIP (api/main.py сохраняет в {job_id}/upload.zip)
+        zip_path = input_path / "upload.zip"
+        if zip_path.exists():
             import zipfile
-            with zipfile.ZipFile(uploaded_file, "r") as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(input_path)
-            uploaded_file.unlink()
-        
-        # Поиск .shp файла
-        shp_file = next(input_path.glob("*.shp"), None)
-        if not shp_file:
+            zip_path.unlink()
+
+        shp_files = sorted(input_path.rglob("*.shp"))
+        if not shp_files:
             raise ValueError("Файл .shp не найден в архиве")
+        shp_file = shp_files[0]
 
         jobs[job_id]["progress"] = "Запуск обработки..."
 

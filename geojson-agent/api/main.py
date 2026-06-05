@@ -129,39 +129,3 @@ async def cleanup(job_id: str):
     if job_id in jobs:
         del jobs[job_id]
     return {"message": "Очищено"}
-
-# === В конец main.py ===
-
-def process_shapefile_logic(shp_path: Path, out_path: Path, ollama_url: str, model: str):
-    """
-    Основная логика обработки — вызывается из API и из CLI.
-    """
-    import os, json, re, time, psutil
-    import geopandas as gpd
-    from ai_mapper import get_mapping  # относительный импорт для API
-    
-    # ... [весь код из main(), но с заменой глобальных констант на параметры] ...
-    
-    # В начале функции добавьте:
-    os.environ["OLLAMA_BASE_URL"] = ollama_url
-    os.environ["MODEL_NAME"] = model
-    
-    # И замените TARGET_SCHEMA на локальную переменную (как в оригинале)
-    TARGET_SCHEMA = """{"name":"string","area":"number","active":"boolean","history":[{...}]}"""
-    
-    # ... [весь остальной код без изменений] ...
-    
-    # В конце вместо print(...) просто верните путь
-    return str(out_path)
-
-
-# Оставляем поддержку CLI
-if __name__ == "__main__":
-    shp = Path("data/fields.shp")
-    if shp.exists():
-        process_shapefile_logic(
-            shp_path=shp,
-            out_path=Path("output/result.geojson"),
-            ollama_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
-            model=os.getenv("MODEL_NAME", "qwen2.5:14b")
-        )

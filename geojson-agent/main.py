@@ -63,11 +63,12 @@ def extract_crop_year(row, clean_mapping):
 
     return 0
 
-def main():
-    shp_path = Path("data/fields.shp")
-    if not shp_path.exists():
-        print("❌ Положи shapefile в папку ./data/")
-        return
+def process_shapefile_logic(shp_path: Path, out_path: Path, ollama_url: str = None, model: str = None):
+    """Конвертация shapefile → GeoJSON с ИИ-маппингом (используется API worker и CLI)."""
+    if ollama_url:
+        os.environ["OLLAMA_BASE_URL"] = ollama_url
+    if model:
+        os.environ["MODEL_NAME"] = model
 
     print("📦 Читаю shapefile...")
     gdf = gpd.read_file(shp_path)
@@ -82,15 +83,16 @@ def main():
 
     clean_mapping = {k: v for k, v in mapping.items() if str(v).lower() != "null"}
 
-    def gv(target_field, default=""):
-        src = clean_mapping.get(target_field) or clean_mapping.get(f"history.{target_field}")
-        if not src: return default
-        return safe_get(row, src, default)
-
     features = []
     crops_set = set()
 
     for idx, row in gdf_geojson.iterrows():
+        def gv(target_field, default=""):
+            src = clean_mapping.get(target_field) or clean_mapping.get(f"history.{target_field}")
+            if not src:
+                return default
+            return safe_get(row, src, default)
+
         crop_name_raw = str(gv("cropName", "")).strip()
         if crop_name_raw and crop_name_raw.lower() not in ("", "nan", "none"):
             crops_set.add(crop_name_raw)
@@ -111,7 +113,7 @@ def main():
                 "forecastedYield": to_float(gv("forecastedYield", 0)),
                 "sourceData": str(gv("sourceData", "")),
                 "sowingDetails": str(gv("sowingDetails", "")),
-                "cropYear": extract_crop_year(row, clean_mapping), # ✅ Надёжное извлечение
+                "cropYear": extract_crop_year(row, clean_mapping),
             }]
         }
         geom = row.geometry
@@ -123,11 +125,19 @@ def main():
         "crops": [{"cropName": c} for c in sorted(crops_set)]
     }
 
-    out_path = Path("output/result.geojson")
-    out_path.parent.mkdir(exist_ok=True)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(result, f, indent=2, ensure_ascii=False)
     print(f"🎉 Готово! Результат: {out_path}")
+    return out_path
+
+def main():
+    shp_path = Path("data/fields.shp")
+    if not shp_path.exists():
+        print("❌ Положи shapefile в папку ./data/")
+        return
+    process_shapefile_logic(shp_path, Path("output/result.geojson"))
 
 if __name__ == "__main__":
     main()
