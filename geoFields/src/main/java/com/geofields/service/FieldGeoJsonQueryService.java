@@ -3,9 +3,6 @@ package com.geofields.service;
 import com.geofields.dto.FieldFeatureCollectionDto;
 import com.geofields.dto.FieldFeatureDto;
 import com.geofields.repository.FieldRepository;
-import com.geofields.repository.row.FieldHistoryRow;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.Collection;
@@ -16,8 +13,6 @@ import java.util.Set;
 @Service
 public class FieldGeoJsonQueryService {
 
-    private static final Logger log = LoggerFactory.getLogger(FieldGeoJsonQueryService.class);
-
     private final FieldRepository fieldRepository;
     private final FieldGeoJsonAssembler assembler;
 
@@ -27,19 +22,11 @@ public class FieldGeoJsonQueryService {
     }
 
     public FieldFeatureCollectionDto loadForOrganization(Long organizationId) {
-        return buildFeatureCollection(
-                fieldRepository.findAllFieldsWithHistory(organizationId),
-                "/get_fields",
-                organizationId,
-                null);
+        return assembler.toFeatureCollection(fieldRepository.findAllFieldsWithHistory(organizationId));
     }
 
     public FieldFeatureCollectionDto loadIntersectingForField(Long organizationId, Long fieldId) {
-        return buildFeatureCollection(
-                fieldRepository.findIntersectingFieldsWithHistory(organizationId, fieldId),
-                "intersections",
-                organizationId,
-                fieldId);
+        return assembler.toFeatureCollection(fieldRepository.findIntersectingFieldsWithHistory(organizationId, fieldId));
     }
 
     public FieldFeatureCollectionDto loadFeatureSubsetByFieldIds(Long organizationId, Collection<Long> fieldIds) {
@@ -54,18 +41,5 @@ public class FieldGeoJsonQueryService {
                 .filter(f -> wanted.contains(f.id()))
                 .toList();
         return new FieldFeatureCollectionDto("FeatureCollection", filtered);
-    }
-
-    private FieldFeatureCollectionDto buildFeatureCollection(
-            List<FieldHistoryRow> rows,
-            String sourceLabel,
-            Long organizationId,
-            Long fieldId) {
-
-
-        FieldFeatureCollectionDto dto = assembler.toFeatureCollection(rows);
-
-
-        return dto;
     }
 }

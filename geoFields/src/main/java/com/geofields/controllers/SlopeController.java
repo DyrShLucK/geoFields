@@ -35,11 +35,9 @@ public class SlopeController {
             @RequestParam String date) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
         if (org.isError()) return ValidationResponses.castError(org.errorResponse());
-        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
+        RequestValidationService.ValidationResult<Long> field =
+                validationService.requireOwnedFieldId(field_id, org.value(), false);
         if (field.isError()) return ValidationResponses.castError(field.errorResponse());
-        RequestValidationService.ValidationResult<Void> fieldAccess =
-                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
-        if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
         RequestValidationService.ValidationResult<java.time.LocalDate> targetDate = validationService.parseDate(date);
         if (targetDate.isError()) return ValidationResponses.castError(targetDate.errorResponse());
         try {
@@ -63,19 +61,19 @@ public class SlopeController {
         RequestValidationService.ValidationResult<List<Long>> fields = validationService.parseFieldIds(rawFieldIds);
         if (fields.isError()) return ValidationResponses.castError(fields.errorResponse());
         List<Long> fieldIds = fields.value();
-        for (Long fieldId : fieldIds) {
-            RequestValidationService.ValidationResult<Void> fieldAccess =
-                    validationService.ensureFieldBelongsToOrganization(fieldId, org.value(), true);
-            if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
-        }
+        RequestValidationService.ValidationResult<List<Long>> fieldAccess =
+                validationService.ensureFieldsBelongToOrganization(fieldIds, org.value(), true);
+        if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
         RequestValidationService.ValidationResult<RequestValidationService.DateRange> range =
                 validationService.parseDateRange(start_date, end_date);
         if (range.isError()) return ValidationResponses.castError(range.errorResponse());
+        String normalizedStartDate = range.value().startDate().toString();
+        String normalizedEndDate = range.value().endDate().toString();
         try {
             return ResponseEntity.ok(slopePythonClient.getTrend(
                     fieldIds,
-                    range.value().startDate().toString(),
-                    range.value().endDate().toString()));
+                    normalizedStartDate,
+                    normalizedEndDate));
         } catch (RestClientResponseException ex) {
             return ResponseEntity.status(ex.getStatusCode())
                     .body(Map.of("error", slopePythonClient.upstreamDetail(ex)));
@@ -95,11 +93,11 @@ public class SlopeController {
             @PathVariable int y) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
         if (org.isError()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
-        if (field.isError()) return ResponseEntity.badRequest().build();
-        RequestValidationService.ValidationResult<Void> fieldAccess =
-                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
-        if (fieldAccess.isError()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        RequestValidationService.ValidationResult<Long> field =
+                validationService.requireOwnedFieldId(field_id, org.value(), false);
+        if (field.isError()) {
+            return ResponseEntity.status(field.errorResponse().getStatusCode()).build();
+        }
         try {
             byte[] png = slopePythonClient.getTilePng(field_id, date, scene_id, z, x, y);
             if (png == null || png.length == 0) {

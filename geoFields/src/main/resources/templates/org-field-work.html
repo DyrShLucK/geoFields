@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Операции по полям — GeoFields</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+</head>
+<body class="geo-page-org geo-page-org--agronomist geo-page-org--field-work">
+
+<div class="card agronomist-hero">
+    <div class="agronomist-hero-head">
+        <div>
+            <span class="section-kicker">Кабинет агронома</span>
+            <h1>Операции по полям</h1>
+            <p class="muted mb-3">Учёт агротехнических мероприятий: удобрения, обработка, полив и др. При смене статуса фиксируется журнал — когда операция запланирована, начата и завершена.</p>
+        </div>
+        <div class="agronomist-org-badge">
+            <strong id="org-name">…</strong>
+            <span id="user-label">…</span>
+        </div>
+    </div>
+    <div class="nav-links">
+        <a th:href="@{/}" class="btn-link">← Вернуться на карту</a>
+        <a th:href="@{/org/agronomist}" class="btn-link">История посевов</a>
+        <a th:href="@{/org/reports}" class="btn-link">Отчёты</a>
+    </div>
+    <div id="banner"></div>
+</div>
+
+<div class="card">
+    <div class="card-section-title">
+        <span class="card-section-icon card-section-icon--blue">🚜</span>
+        <h2>Операции выбранного поля</h2>
+    </div>
+    <p class="muted font-sm mb-3">Выберите поле и нажмите «Показать», чтобы увидеть список операций и форму добавления.</p>
+    <div class="row agronomist-toolbar items-center align-end">
+        <div class="form-field agronomist-field-select">
+            <label class="form-label" for="field-select">Поле</label>
+            <select id="field-select">
+                <option value="">— выберите поле —</option>
+            </select>
+        </div>
+        <button type="button" class="btn primary agronomist-toolbar-btn" id="btn-load-operations">Показать</button>
+    </div>
+
+    <div id="operations-panel" class="field-work-panel is-collapsed">
+        <p class="muted font-sm">Поле: <strong id="selected-field-name">—</strong></p>
+
+        <h3 class="field-work-title">Список операций</h3>
+        <div id="operations-filters" class="field-work-filters is-collapsed">
+            <div class="field-work-filters-row">
+                <div class="form-field">
+                    <label class="form-label" for="op-filter-category">Категория</label>
+                    <select id="op-filter-category">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="op-filter-status">Статус</label>
+                    <select id="op-filter-status">
+                        <option value="">Все</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="op-filter-date-from">Дата с</label>
+                    <input type="date" id="op-filter-date-from" class="form-input">
+                </div>
+                <div class="form-field">
+                    <label class="form-label" for="op-filter-date-to">Дата по</label>
+                    <input type="date" id="op-filter-date-to" class="form-input">
+                </div>
+                <div class="form-field form-field--wide">
+                    <label class="form-label" for="op-filter-name">Название</label>
+                    <input type="text" id="op-filter-name" class="form-input" placeholder="Поиск по названию">
+                </div>
+                <button type="button" class="btn" id="btn-reset-op-filters">Сбросить</button>
+            </div>
+            <p class="muted font-sm field-work-filter-hint" id="op-filter-hint"></p>
+        </div>
+        <div id="operations-wrap" class="table-container history-wrap"></div>
+
+        <h3 class="field-work-title field-work-title--form" id="form-title">Новая операция</h3>
+        <div class="grid-inputs field-work-form-grid">
+            <div class="form-field form-field--wide">
+                <label class="form-label" for="form-name">Название</label>
+                <input type="text" id="form-name" class="form-input" maxlength="255" placeholder="Напр. Внесение NPK 120 кг/га">
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-category">Категория</label>
+                <select id="form-category"></select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-status">Статус</label>
+                <select id="form-status"></select>
+            </div>
+            <div class="form-field">
+                <label class="form-label" for="form-operation-at">Дата и время</label>
+                <input type="datetime-local" id="form-operation-at" class="form-input">
+            </div>
+            <div class="form-field form-field--wide">
+                <label class="form-label" for="form-status-note">Комментарий к статусу</label>
+                <input type="text" id="form-status-note" class="form-input" maxlength="500" placeholder="Необязательно — попадёт в журнал при сохранении">
+            </div>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn primary" id="btn-save-operation">Сохранить</button>
+            <button type="button" class="btn" id="btn-cancel-edit">Отмена</button>
+            <button type="button" class="btn" id="btn-new-operation">Новая операция</button>
+        </div>
+
+        <div id="status-history-panel" class="status-history-panel is-collapsed">
+            <h3 class="field-work-title">Журнал смены статусов</h3>
+            <p class="muted font-sm" id="status-history-caption">—</p>
+            <ul id="status-history-list" class="status-history-list"></ul>
+        </div>
+    </div>
+</div>
+
+<script th:src="@{/js/csrf.js}"></script>
+<script th:src="@{/js/field-work.js}"></script>
+</body>
+</html>

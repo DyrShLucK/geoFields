@@ -129,10 +129,8 @@ class SlopeControllerTest {
     private void mockAuthorizedSingleField(String rawFieldId, long fieldId, boolean parseDateForTiles) {
         when(validationService.requireOrganizationId())
                 .thenReturn(RequestValidationService.ValidationResult.ok(10L));
-        when(validationService.parseFieldId(rawFieldId))
+        when(validationService.requireOwnedFieldId(rawFieldId, 10L, false))
                 .thenReturn(RequestValidationService.ValidationResult.ok(fieldId));
-        when(validationService.ensureFieldBelongsToOrganization(fieldId, 10L, false))
-                .thenReturn(RequestValidationService.ValidationResult.ok(null));
         if (parseDateForTiles) {
             when(validationService.parseDate(any()))
                     .thenReturn(RequestValidationService.ValidationResult.ok(java.time.LocalDate.parse("2024-01-01")));
@@ -148,10 +146,8 @@ class SlopeControllerTest {
                 .thenReturn(RequestValidationService.ValidationResult.ok(10L));
         when(validationService.parseFieldIds(rawFieldIds))
                 .thenReturn(RequestValidationService.ValidationResult.ok(parsedFieldIds));
-        for (Long fieldId : parsedFieldIds) {
-            when(validationService.ensureFieldBelongsToOrganization(fieldId, 10L, true))
-                    .thenReturn(RequestValidationService.ValidationResult.ok(null));
-        }
+        when(validationService.ensureFieldsBelongToOrganization(parsedFieldIds, 10L, true))
+                .thenReturn(RequestValidationService.ValidationResult.ok(parsedFieldIds));
         when(validationService.parseDateRange(startDate, endDate))
                 .thenReturn(RequestValidationService.ValidationResult.ok(
                         new RequestValidationService.DateRange(

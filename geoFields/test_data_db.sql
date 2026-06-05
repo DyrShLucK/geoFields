@@ -57,21 +57,4 @@ INSERT INTO field_crops (
           65.00, 68.50, 'Агроном', 'Гибрид Краснодарский 436МВ', 2026
       );
 
--- 5. NDVI данные (ссылки)
-INSERT INTO ndvi_data (url) VALUES
-                                ('https://earthengine.../tiles/{z}/{x}/{y}?token=abc1'),
-                                ('https://earthengine.../tiles/{z}/{x}/{y}?token=abc2'),
-                                ('https://earthengine.../tiles/{z}/{x}/{y}?token=abc3'),
-                                ('https://earthengine.../tiles/{z}/{x}/{y}?token=abc4'),
-                                ('https://earthengine.../tiles/{z}/{x}/{y}?token=abc5');
-
--- 6. Аналитика (field_crop_id и ndvi_id подтягиваются автоматически)
-INSERT INTO field_analytics (field_crop_id, ndvi_id, record_date)
-VALUES
--- Для пшеницы (field_id = 1)
-((SELECT history_id FROM field_crops WHERE field_id = 1 LIMIT 1), 1, '2026-04-01'),
-((SELECT history_id FROM field_crops WHERE field_id = 1 LIMIT 1), 2, '2026-04-15'),
-((SELECT history_id FROM field_crops WHERE field_id = 1 LIMIT 1), 3, '2026-04-25'),
--- Для кукурузы (field_id = 2)
-((SELECT history_id FROM field_crops WHERE field_id = 2 LIMIT 1), 4, '2026-04-10'),
-((SELECT history_id FROM field_crops WHERE field_id = 2 LIMIT 1), 5, '2026-04-20');
+-- NDVI-кэш: таблица field_analytic (Flyway V2), заполняется Python-сервисом при расчёте снимков.

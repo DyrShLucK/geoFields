@@ -55,10 +55,7 @@ class FieldGeoJsonServiceTest {
                                                                 new BigDecimal("5.30"),
                                                                 "satellite",
                                                                 "spring sowing",
-                                                                2024,
-                                                                java.time.LocalDate.parse("2024-06-15"),
-                                                                "https://tiles.example/{z}/{x}/{y}",
-                                                                java.time.LocalDateTime.parse("2024-06-15T12:00:00")
+                                                                2024
                                                         )
                                                 )
                                         ),
@@ -83,7 +80,6 @@ class FieldGeoJsonServiceTest {
         assertThat(feature.properties().area()).isEqualByComparingTo("44.50");
         assertThat(feature.properties().history()).hasSize(1);
         assertThat(feature.properties().history().getFirst().cropName()).isEqualTo("Wheat");
-        assertThat(feature.properties().history().getFirst().ndviUrl()).contains("tiles.example");
         assertThat(feature.geometry().type()).isEqualTo("Polygon");
         assertThat(feature.geometry().coordinates()).startsWith("[[[");
     }

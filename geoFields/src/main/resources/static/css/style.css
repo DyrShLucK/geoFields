@@ -1068,7 +1068,7 @@ body, html {
 
 .field-history-header {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
     padding: 16px 20px 10px;
@@ -1076,10 +1076,49 @@ body, html {
     flex-shrink: 0;
 }
 
+.field-history-header-main {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
 .field-history-title {
     font-size: 15px;
     font-weight: 700;
     color: var(--text-primary);
+}
+
+.field-history-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.field-history-tabs.hidden {
+    display: none;
+}
+
+.field-history-tab {
+    border: 1px solid var(--border-color);
+    background: #f8fafc;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.field-history-tab:hover {
+    background: #f1f5f9;
+}
+
+.field-history-tab.is-active {
+    background: #334155;
+    color: #fff;
+    border-color: #334155;
 }
 
 .field-history-close {
@@ -1114,6 +1153,176 @@ body, html {
     color: var(--text-secondary);
     font-weight: 600;
     white-space: nowrap;
+}
+
+.field-op-map-filters {
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+}
+
+.field-op-map-filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    align-items: flex-end;
+}
+
+.field-op-map-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+}
+
+.field-op-map-filter--grow {
+    flex: 1 1 160px;
+    min-width: 140px;
+}
+
+.field-op-map-filter select,
+.field-op-map-filter input[type="date"],
+.field-op-map-filter input[type="text"] {
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-family: inherit;
+}
+
+.field-op-map-filter-reset {
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+    color: var(--text-primary);
+}
+
+.field-op-map-filter-reset:hover {
+    background: #f1f5f9;
+}
+
+.field-operations-map-table .field-op-map-actions {
+    white-space: nowrap;
+    text-align: right;
+}
+
+.field-op-map-toggle {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.field-op-map-toggle:hover {
+    background: #f1f5f9;
+}
+
+.field-op-map-detail.hidden {
+    display: none;
+}
+
+.field-op-map-detail td {
+    background: #f8fafc;
+    padding-top: 0;
+}
+
+.field-op-map-detail-inner {
+    padding: 8px 4px 12px;
+}
+
+.field-history-panel .op-status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+}
+
+.field-history-panel .op-status-badge--IN_PROGRESS,
+.field-history-panel .op-status-badge--STARTED {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
+
+.field-history-panel .op-status-badge--COMPLETED {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #bbf7d0;
+}
+
+.field-history-panel .op-status-badge--FROZEN {
+    background: #f0f9ff;
+    color: #0369a1;
+    border-color: #bae6fd;
+}
+
+.field-history-panel .op-status-badge--CANCELLED {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.field-op-status-history {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 8px;
+    border-left: 2px solid #e2e8f0;
+}
+
+.field-op-status-history-item {
+    position: relative;
+    padding: 0 0 16px 18px;
+    display: flex;
+    gap: 10px;
+}
+
+.field-op-status-history-dot {
+    position: absolute;
+    left: -7px;
+    top: 4px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #334155;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.field-op-status-history-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 13px;
+}
+
+.field-op-status-history-time,
+.field-op-status-history-user {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.field-op-status-history-note {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--text-primary);
 }
 
 /* Контекстное меню поля на карте */
@@ -2013,4 +2222,149 @@ rect.rain-bar:hover {
 
 .progress-fill[data-tip]:hover {
     background: #10b981 !important;
+}
+
+/* =========================================================
+   МОБИЛЬНАЯ АДАПТАЦИЯ ГЛАВНОЙ СТРАНИЦЫ (только узкие экраны)
+   ========================================================= */
+@media (max-width: 768px) {
+    /* --- Верхняя панель: контент не должен выходить за экран --- */
+    .topbar {
+        padding: 0 12px;
+        gap: 8px;
+    }
+    .topbar-left,
+    .topbar-right {
+        gap: 8px;
+        min-width: 0;
+    }
+    .brand-subtitle {
+        display: none;
+    }
+    .brand-title {
+        font-size: 15px;
+        white-space: nowrap;
+    }
+    .brand-logo {
+        width: 32px;
+        height: 32px;
+        font-size: 15px;
+    }
+    /* Прячем длинный текст синхронизации, оставляем пульсирующую точку */
+    .sync-status {
+        font-size: 0;
+        gap: 0;
+    }
+    .sync-status .status-dot {
+        width: 11px;
+        height: 11px;
+    }
+    /* Профиль: оставляем аватар, скрываем подписи */
+    .profile-card > div:not(.profile-avatar) {
+        display: none;
+    }
+    .profile-name,
+    .profile-role {
+        display: none;
+    }
+
+    /* --- Боковое меню на (почти) всю ширину --- */
+    .sidebar {
+        width: 86vw;
+        max-width: 320px;
+    }
+    .sidebar-inner {
+        padding: 18px;
+    }
+
+    /* --- Панели слоёв и фильтрации не выходят за рамки --- */
+    .layers-panel,
+    .filter-panel {
+        top: 84px;
+        left: 12px !important;
+        right: 12px !important;
+        width: auto !important;
+        max-width: none;
+        max-height: 72vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* --- Панель аналитики на всю ширину экрана --- */
+    .analytics-panel {
+        width: 100vw !important;
+        min-width: 0 !important;
+        max-width: 100vw !important;
+    }
+    .analytics-panel-scroll {
+        padding: 16px 14px 28px;
+    }
+
+    /* --- Контекстное меню поля --- */
+    .field-context-menu {
+        min-width: 0;
+        max-width: 92vw;
+    }
+
+    /* --- Нижняя панель истории / операций: читабельные таблицы --- */
+    .field-history-panel {
+        height: var(--field-history-panel-height, 62vh);
+        max-height: 82vh;
+    }
+    .field-history-body {
+        padding: 12px 12px 16px;
+    }
+    .field-history-table {
+        font-size: 11px;
+    }
+    .field-history-table th,
+    .field-history-table td {
+        padding: 6px 5px;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    /* История операций по полю (карта): фильтры и журнал в столбик */
+    .field-operations-map-table .field-op-map-actions {
+        text-align: left;
+    }
+    .field-op-map-toggle {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
+    .field-op-map-filters-row {
+        gap: 8px;
+    }
+    .field-op-map-filter,
+    .field-op-map-filter--grow {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+
+    /* --- Любые таблицы: горизонтальный скролл вместо разрыва --- */
+    .table-container,
+    .history-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+}
+
+/* Очень узкие экраны (до 420px) */
+@media (max-width: 420px) {
+    .topbar {
+        height: 60px;
+    }
+    .sidebar,
+    .analytics-panel {
+        top: 60px;
+        height: calc(100vh - 60px);
+    }
+    .layers-panel,
+    .filter-panel {
+        top: 72px;
+        max-height: 68vh;
+    }
+    .brand-title {
+        font-size: 14px;
+    }
 }

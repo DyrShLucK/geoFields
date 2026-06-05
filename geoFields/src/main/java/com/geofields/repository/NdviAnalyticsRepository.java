@@ -1,13 +1,10 @@
 package com.geofields.repository;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-/** NDVI в разрезе field_analytics + ndvi_data (дата = record_date). */
+/** Вспомогательные геозапросы для legacy NDVI-эндпоинтов (без чтения field_analytics). */
 public interface NdviAnalyticsRepository {
-
-    Optional<String> findNdviTileUrlForFieldOnDate(long fieldId, long organizationId, LocalDate recordDate);
 
     List<Long> findDistinctFieldIdsForOrganization(long organizationId);
 

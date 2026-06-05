@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отчёты и аналитика — GeoFields</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" th:href="@{/css/app-pages.css}">
+    <link rel="icon" href="/images/favicon.ico" type="image/x-icon">
+</head>
+<body class="geo-page-org geo-page-org--agronomist geo-page-org--reports">
+
+<div class="card agronomist-hero">
+    <div class="agronomist-hero-head">
+        <div>
+            <span class="section-kicker">Аналитика</span>
+            <h1>Отчёты по полям</h1>
+            <p class="muted mb-3">Сводка по операциям и севообороту за выбранный период. Выберите одно поле, группу полей или всю организацию — данные обновятся на дашборде.</p>
+        </div>
+        <div class="agronomist-org-badge">
+            <strong id="org-name">…</strong>
+            <span id="user-label">…</span>
+        </div>
+    </div>
+    <div class="nav-links">
+        <a th:href="@{/}" class="btn-link">← Карта</a>
+        <a th:href="@{/org/agronomist}" class="btn-link">История посевов</a>
+        <a th:href="@{/org/field-work}" class="btn-link">Операции</a>
+    </div>
+    <div id="banner"></div>
+</div>
+
+<div class="card reports-filters-card">
+    <div class="card-section-title">
+        <span class="card-section-icon card-section-icon--blue">📊</span>
+        <h2>Параметры отчёта</h2>
+    </div>
+    <div class="reports-filters-grid">
+        <div class="reports-filter-block reports-filter-block--period">
+            <label class="form-label">Период</label>
+            <div class="reports-period-row">
+                <input type="date" id="filter-date-from" class="form-input">
+                <span class="reports-period-sep">—</span>
+                <input type="date" id="filter-date-to" class="form-input">
+            </div>
+            <div class="reports-presets">
+                <button type="button" class="btn reports-preset-btn" data-months="3">3 мес.</button>
+                <button type="button" class="btn reports-preset-btn" data-months="6">6 мес.</button>
+                <button type="button" class="btn reports-preset-btn" data-months="12">Год</button>
+                <button type="button" class="btn reports-preset-btn" data-months="0">Всё время</button>
+            </div>
+        </div>
+        <div class="reports-filter-block reports-filter-block--fields">
+            <div class="reports-fields-head">
+                <label class="form-label">Поля</label>
+                <div class="reports-fields-actions">
+                    <button type="button" class="btn-linkish" id="btn-fields-all">Все</button>
+                    <button type="button" class="btn-linkish" id="btn-fields-none">Сбросить</button>
+                </div>
+            </div>
+            <input type="text" id="fields-search" class="form-input reports-fields-search" placeholder="Поиск поля по названию…">
+            <div id="fields-checklist" class="reports-fields-checklist">
+                <p class="muted font-sm m-0">Загрузка списка полей…</p>
+            </div>
+        </div>
+    </div>
+    <div class="reports-filter-actions">
+        <button type="button" class="btn primary" id="btn-build-report">Сформировать отчёт</button>
+        <button type="button" class="btn" id="btn-export-pdf" disabled>📄 Скачать PDF</button>
+        <button type="button" class="btn" id="btn-layout-edit" disabled>⚙ Настроить блоки</button>
+        <span class="muted font-sm" id="report-scope-hint"></span>
+    </div>
+</div>
+
+<div id="dashboard" class="reports-dashboard is-collapsed">
+    <div class="reports-print-header" id="report-print-header">
+        <div class="reports-print-brand">
+            <span class="reports-print-logo">🌿 GeoFields</span>
+            <span class="reports-print-title">Отчёт по полям</span>
+        </div>
+        <div class="reports-print-meta" id="report-print-meta"></div>
+    </div>
+
+    <div class="reports-layout-hint" id="layout-hint" hidden>
+        Перетащите блок за ⋮⋮, чтобы изменить порядок. Снимите галочку, чтобы скрыть блок из отчёта.
+        <button type="button" class="btn-linkish" id="btn-layout-done">Готово</button>
+        <button type="button" class="btn-linkish" id="btn-layout-reset">Сбросить порядок</button>
+    </div>
+    <div class="reports-blocks-panel" id="blocks-panel" hidden></div>
+
+    <div class="reports-layout-stack" id="reports-layout-grid">
+        <div class="reports-layout-item" data-block-id="kpis">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Ключевые показатели</h3>
+                </div>
+                <div class="reports-block-body reports-block-body--kpis">
+                    <div class="reports-kpi-grid" id="kpi-grid"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="timeline">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Динамика операций по месяцам</h3>
+                    <span class="reports-chart-sub" id="timeline-sub"></span>
+                </div>
+                <div class="reports-block-body">
+                    <div id="chart-timeline" class="reports-timeline-chart"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="status">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Операции по статусам</h3>
+                </div>
+                <div class="reports-block-body">
+                    <div id="chart-status" class="reports-donut-wrap"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="category">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Операции по категориям</h3>
+                </div>
+                <div class="reports-block-body">
+                    <div id="chart-category" class="reports-bar-chart"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="crops-area">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Площади по культурам</h3>
+                    <span class="reports-chart-sub">га</span>
+                </div>
+                <div class="reports-block-body">
+                    <div id="chart-crops" class="reports-bar-chart"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="crops-yield">
+            <div class="reports-block">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Урожайность по культурам</h3>
+                    <span class="reports-chart-sub">ц/га</span>
+                </div>
+                <div class="reports-block-body">
+                    <div id="chart-yield" class="reports-bar-chart"></div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="fields-table">
+            <div class="reports-block reports-block--table">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Сводка по полям</h3>
+                </div>
+                <div class="reports-block-body reports-block-body--table">
+                    <div class="reports-table-toolbar">
+                        <div class="reports-table-tools">
+                            <input type="text" id="fields-table-search" class="form-input reports-table-search" placeholder="Поиск по полю / культуре…">
+                            <button type="button" class="btn reports-export-btn" id="btn-export-fields">Экспорт CSV</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="history-table reports-fields-table reports-sortable" id="fields-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="fieldName" data-type="str">Поле</th>
+                                    <th data-sort="areaHa" data-type="num">Площадь, га</th>
+                                    <th data-sort="operationsCount" data-type="num">Операций</th>
+                                    <th data-sort="completedOperations" data-type="num">Завершено</th>
+                                    <th data-sort="latestCropName" data-type="str">Последняя культура</th>
+                                    <th data-sort="latestCropYear" data-type="num">Год</th>
+                                    <th data-sort="latestYield" data-type="num">Урожайность</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="reports-layout-item" data-block-id="ops-table">
+            <div class="reports-block reports-block--table">
+                <div class="reports-block-chrome">
+                    <span class="reports-block-drag" title="Перетащить">⋮⋮</span>
+                    <h3 class="reports-block-title">Операции в периоде</h3>
+                </div>
+                <div class="reports-block-body reports-block-body--table">
+                    <div class="reports-table-toolbar">
+                        <div class="reports-table-tools">
+                            <input type="text" id="ops-table-search" class="form-input reports-table-search" placeholder="Поиск по названию / полю…">
+                            <select id="ops-table-status" class="form-input reports-table-filter"><option value="">Все статусы</option></select>
+                            <select id="ops-table-category" class="form-input reports-table-filter"><option value="">Все категории</option></select>
+                            <button type="button" class="btn reports-export-btn" id="btn-export-ops">Экспорт CSV</button>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table class="history-table reports-sortable" id="recent-ops-table">
+                            <thead>
+                                <tr>
+                                    <th data-sort="operationAt" data-type="date">Дата</th>
+                                    <th data-sort="fieldName" data-type="str">Поле</th>
+                                    <th data-sort="name" data-type="str">Операция</th>
+                                    <th data-sort="categoryTitleRu" data-type="str">Категория</th>
+                                    <th data-sort="statusTitleRu" data-type="str">Статус</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script th:src="@{/js/csrf.js}"></script>
+<script th:src="@{/js/reports.js}"></script>
+</body>
+</html>

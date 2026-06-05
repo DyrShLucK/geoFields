@@ -2,7 +2,6 @@ package com.geofields.repository.row;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 public record FieldHistoryRow(
         Long fieldId,
@@ -23,9 +22,6 @@ public record FieldHistoryRow(
         BigDecimal forecastedYield,
         String sourceData,
         String sowingDetails,
-        Integer cropYear,
-        LocalDate analyticsDate,
-        String ndviUrl,
-        LocalDateTime ndviCreatedAt
+        Integer cropYear
 ) {
 }

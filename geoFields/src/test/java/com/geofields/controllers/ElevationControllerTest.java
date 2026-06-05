@@ -78,9 +78,7 @@ class ElevationControllerTest {
     private void mockAuthorizedField(String fieldIdStr, long fieldId) {
         when(validationService.requireOrganizationId())
                 .thenReturn(RequestValidationService.ValidationResult.ok(10L));
-        when(validationService.parseFieldId(fieldIdStr))
+        when(validationService.requireOwnedFieldId(fieldIdStr, 10L, false))
                 .thenReturn(RequestValidationService.ValidationResult.ok(fieldId));
-        when(validationService.ensureFieldBelongsToOrganization(fieldId, 10L, false))
-                .thenReturn(RequestValidationService.ValidationResult.ok(null));
     }
 }

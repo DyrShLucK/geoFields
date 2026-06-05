@@ -7,6 +7,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -69,7 +70,7 @@ public class NdviPythonClient {
                 } catch (RestClientResponseException ex) {
                     log.debug("NDVI warmup upstream {} for field={} date={}: {}",
                             ex.getStatusCode(), fieldId, monthDate, upstreamDetail(ex));
-                } catch (RuntimeException ex) {
+                } catch (RestClientException ex) {
                     log.debug("NDVI warmup failed for field={} date={}: {}",
                             fieldId, monthDate, ex.getMessage());
                 }

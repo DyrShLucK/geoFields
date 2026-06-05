@@ -77,6 +77,11 @@ let activeFieldPopupFieldId = null;
 let suppressPopupCloseHighlightReset = false;
 const ndviSelectedFieldIds = new Set();
 let fieldContextMenuTargetId = null;
+let fieldHistoryPanelMode = "crop";
+let fieldHistoryPanelFieldId = null;
+let fieldHistoryPanelFieldName = null;
+let fieldWorkCatalogCache = null;
+let lastMapFieldOperations = [];
 
 const ANALYTICS_PANEL_WIDTH_KEY = "geofields-analytics-panel-width";
 const ANALYTICS_PANEL_MIN_WIDTH = 320;
@@ -88,11 +93,14 @@ const FIELD_HISTORY_PANEL_MAX_HEIGHT_RATIO = 0.65;
 // Шаблоны ролевой модели
 const MENU_TEMPLATES = {
     "USER": [
-        { label: "Карта полей", path: "/", icon: "🗺️", active: true }
+        { label: "Карта полей", path: "/", icon: "🗺️", active: true },
+        { label: "Отчёты", path: "/org/reports", icon: "📊" }
     ],
     "AGRONOMIST": [
         { label: "Карта полей", path: "/", icon: "🗺️", active: true },
-        { label: "История посевов", path: "/org/agronomist", icon: "🌾" }
+        { label: "История посевов", path: "/org/agronomist", icon: "🌾" },
+        { label: "Операции по полям", path: "/org/field-work", icon: "🚜" },
+        { label: "Отчёты", path: "/org/reports", icon: "📊" }
     ],
     "ORG_MANAGER": [
         { label: "Карта полей", path: "/", icon: "🗺️", active: true },
@@ -101,6 +109,8 @@ const MENU_TEMPLATES = {
     "ORG_ADMIN": [
         { label: "Карта полей", path: "/", icon: "🗺️", active: true },
         { label: "История посевов", path: "/org/agronomist", icon: "🌾" },
+        { label: "Операции по полям", path: "/org/field-work", icon: "🚜" },
+        { label: "Отчёты", path: "/org/reports", icon: "📊" },
         { label: "Заявки и инвайты", path: "/org/manager", icon: "📋" },
         { label: "Управление организацией", path: "/org/admin", icon: "⚙️" }
     ]
@@ -245,6 +255,14 @@ async function checkSessionAndBuildMenu() {
 // =====================================================
 // ПОСТРОЕНИЕ МЕНЮ ПО РОЛИ
 // =====================================================
+function isSidebarItemActive(item, currentPath) {
+    if (!item || !item.path) return false;
+    if (item.path === '/') {
+        return currentPath === '/' || currentPath === '/index.html';
+    }
+    return currentPath === item.path || currentPath.startsWith(item.path + '/');
+}
+
 function buildMenuForRole(role) {
     const menuContainer = document.getElementById("dynamic-menu");
     if (!menuContainer) return;
@@ -254,8 +272,9 @@ function buildMenuForRole(role) {
     const canFieldOps = role === "AGRONOMIST" || role === "ORG_ADMIN";
     
     let html = '<div class="sidebar-heading">Модули systems</div>';
+    const currentPath = window.location.pathname || '/';
     items.forEach(item => {
-        const activeClass = item.active ? "active" : "";
+        const activeClass = isSidebarItemActive(item, currentPath) ? "active" : "";
         html += `
             <a href="${item.path}" class="sidebar-item ${activeClass}">
                 <span class="sidebar-icon">${item.icon}</span> ${item.label}
@@ -353,6 +372,24 @@ function getFieldDisplayName(fieldId) {
     const props = feature?.properties || {};
     const name = props.name || props.fieldName;
     return name && String(name).trim() ? String(name).trim() : `Поле #${idStr}`;
+}
+
+function canShowFieldOperationsOnMap() {
+    const role = window.geoCurrentUserRole;
+    return role === "USER" || role === "AGRONOMIST" || role === "ORG_ADMIN";
+}
+
+function formatFieldWorkDateTime(iso) {
+    if (!iso) return "—";
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString("ru-RU", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit"
+    });
 }
 
 function getFieldBoundsById(fieldId) {
@@ -575,6 +612,14 @@ function updateFieldContextMenuLabels() {
             ? "Убрать из рельефа и уклона"
             : "Выбрать для рельефа и уклона";
     }
+    const opsBtn = menu.querySelector("[data-action='show-operations']");
+    if (opsBtn) {
+        opsBtn.style.display = canShowFieldOperationsOnMap() ? "" : "none";
+    }
+    const reportsBtn = menu.querySelector("[data-action='open-reports']");
+    if (reportsBtn) {
+        reportsBtn.style.display = canShowFieldOperationsOnMap() ? "" : "none";
+    }
 }
 
 function syncFieldHistoryPanelLayout() {
@@ -601,14 +646,25 @@ function syncMapFloatingButtons() {
     document.getElementById("sidebar-toggle")?.classList.toggle("is-active", !!document.getElementById("sidebar")?.classList.contains("open"));
 }
 
-function renderFieldHistoryPanel(fieldId, fieldName) {
+function updateFieldHistoryPanelTabs() {
+    const tabs = document.getElementById("field-history-tabs");
+    if (!tabs) return;
+    const show = canShowFieldOperationsOnMap();
+    tabs.classList.toggle("hidden", !show);
+    tabs.querySelectorAll("[data-history-tab]").forEach(btn => {
+        const active = btn.getAttribute("data-history-tab") === fieldHistoryPanelMode;
+        btn.classList.toggle("is-active", active);
+    });
+}
+
+function renderFieldCropHistoryBody(fieldId, fieldName) {
     const body = document.getElementById("field-history-body");
     const title = document.getElementById("field-history-title");
     if (!body || !title) return;
     const idStr = String(fieldId);
     const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === idStr);
     const history = parseFieldHistory(feature?.properties?.history);
-    title.textContent = `История поля: ${fieldName || `#${idStr}`}`;
+    title.textContent = `История посевов: ${fieldName || `#${idStr}`}`;
     if (!history.length) {
         body.innerHTML = `<p class="muted font-sm m-0">История севооборота отсутствует.</p>`;
         return;
@@ -642,12 +698,265 @@ function renderFieldHistoryPanel(fieldId, fieldName) {
     `;
 }
 
-function openFieldHistoryPanel(fieldId, fieldName) {
+async function ensureFieldWorkCatalog() {
+    if (fieldWorkCatalogCache) return fieldWorkCatalogCache;
+    try {
+        const res = await fetch(apiPath("/api/field-work/catalog"), fetchOpts);
+        if (res.ok) fieldWorkCatalogCache = await res.json();
+    } catch (_e) { /* ignore */ }
+    return fieldWorkCatalogCache;
+}
+
+function readMapOperationFilters(root) {
+    return {
+        category: root.querySelector("[data-map-op-filter='category']")?.value || "",
+        status: root.querySelector("[data-map-op-filter='status']")?.value || "",
+        dateFrom: root.querySelector("[data-map-op-filter='date-from']")?.value || "",
+        dateTo: root.querySelector("[data-map-op-filter='date-to']")?.value || "",
+        query: (root.querySelector("[data-map-op-filter='name']")?.value || "").trim().toLowerCase()
+    };
+}
+
+function filterFieldWorkOperations(rows, filters) {
+    return rows.filter(op => {
+        if (filters.category && op.category !== filters.category) return false;
+        if (filters.status && op.status !== filters.status) return false;
+        if (filters.query) {
+            const name = String(op.name || "").toLowerCase();
+            if (!name.includes(filters.query)) return false;
+        }
+        if (filters.dateFrom) {
+            const d = new Date(op.operationAt);
+            const from = new Date(filters.dateFrom + "T00:00:00");
+            if (!Number.isNaN(d.getTime()) && !Number.isNaN(from.getTime()) && d < from) return false;
+        }
+        if (filters.dateTo) {
+            const d = new Date(op.operationAt);
+            const to = new Date(filters.dateTo + "T23:59:59");
+            if (!Number.isNaN(d.getTime()) && !Number.isNaN(to.getTime()) && d > to) return false;
+        }
+        return true;
+    });
+}
+
+function buildMapOperationFiltersHtml(catalog) {
+    const catOpts = (catalog?.categories || []).map(c =>
+        `<option value="${escapeHtml(c.code)}">${escapeHtml(c.titleRu)}</option>`).join("");
+    const stOpts = (catalog?.statuses || []).map(s =>
+        `<option value="${escapeHtml(s.code)}">${escapeHtml(s.titleRu)}</option>`).join("");
+    return `
+        <div class="field-op-map-filters" data-map-op-filters>
+            <div class="field-op-map-filters-row">
+                <label class="field-op-map-filter"><span>Категория</span>
+                    <select data-map-op-filter="category"><option value="">Все</option>${catOpts}</select>
+                </label>
+                <label class="field-op-map-filter"><span>Статус</span>
+                    <select data-map-op-filter="status"><option value="">Все</option>${stOpts}</select>
+                </label>
+                <label class="field-op-map-filter"><span>С</span>
+                    <input type="date" data-map-op-filter="date-from">
+                </label>
+                <label class="field-op-map-filter"><span>По</span>
+                    <input type="date" data-map-op-filter="date-to">
+                </label>
+                <label class="field-op-map-filter field-op-map-filter--grow"><span>Название</span>
+                    <input type="text" data-map-op-filter="name" placeholder="Поиск">
+                </label>
+                <button type="button" class="field-op-map-filter-reset" data-map-op-filter-reset>Сброс</button>
+            </div>
+            <p class="muted font-sm m-0" data-map-op-filter-hint></p>
+        </div>
+    `;
+}
+
+function renderMapOperationsTable(body, rows) {
+    const tbody = rows.map(op => `
+        <tr class="field-op-map-row" data-op-id="${op.id}">
+            <td>${formatFieldWorkDateTime(op.operationAt)}</td>
+            <td>${escapeHtml(op.name)}</td>
+            <td>${escapeHtml(op.categoryTitleRu || op.category)}</td>
+            <td><span class="op-status-badge op-status-badge--${String(op.status || "").replace(/[^A-Za-z0-9_-]/g, "")}">${escapeHtml(op.statusTitleRu || op.status)}</span></td>
+            <td class="field-op-map-actions">
+                <button type="button" class="field-op-map-toggle" data-op-id="${op.id}" aria-expanded="false">Журнал статусов</button>
+            </td>
+        </tr>
+        <tr class="field-op-map-detail hidden" data-op-detail-for="${op.id}">
+            <td colspan="5"><div class="field-op-map-detail-inner muted font-sm">Нажмите «Журнал статусов»</div></td>
+        </tr>
+    `).join("");
+    const tableHost = body.querySelector("[data-map-op-table-host]");
+    if (!tableHost) return;
+    if (!rows.length) {
+        const msg = lastMapFieldOperations.length
+            ? "Нет операций по выбранным фильтрам."
+            : "Операций по этому полю пока нет.";
+        tableHost.innerHTML = `<p class="muted font-sm m-0">${escapeHtml(msg)}</p>`;
+        return;
+    }
+    tableHost.innerHTML = `
+        <table class="field-history-table field-operations-map-table">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Название</th>
+                    <th>Категория</th>
+                    <th>Статус</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>${tbody}</tbody>
+        </table>
+    `;
+    bindFieldOperationsMapExpanders(tableHost);
+}
+
+function bindMapOperationFilters(body) {
+    const filtersRoot = body.querySelector("[data-map-op-filters]");
+    if (!filtersRoot) return;
+    const rerender = () => {
+        const filters = readMapOperationFilters(filtersRoot);
+        const filtered = filterFieldWorkOperations(lastMapFieldOperations, filters);
+        const hint = filtersRoot.querySelector("[data-map-op-filter-hint]");
+        if (hint) {
+            const total = lastMapFieldOperations.length;
+            hint.textContent = total
+                ? (filtered.length === total ? `Показано операций: ${total}` : `Показано ${filtered.length} из ${total}`)
+                : "";
+        }
+        renderMapOperationsTable(body, filtered);
+    };
+    filtersRoot.querySelectorAll("[data-map-op-filter]").forEach(el => {
+        el.addEventListener("change", rerender);
+        if (el.getAttribute("data-map-op-filter") === "name") {
+            el.addEventListener("input", rerender);
+        }
+    });
+    filtersRoot.querySelector("[data-map-op-filter-reset]")?.addEventListener("click", () => {
+        filtersRoot.querySelectorAll("[data-map-op-filter]").forEach(el => { el.value = ""; });
+        rerender();
+    });
+}
+
+async function renderFieldOperationsHistoryBody(fieldId, fieldName) {
+    const body = document.getElementById("field-history-body");
+    const title = document.getElementById("field-history-title");
+    if (!body || !title) return;
+    const idStr = String(fieldId);
+    title.textContent = `Операции по полю: ${fieldName || `#${idStr}`}`;
+    body.innerHTML = `<p class="muted font-sm m-0">Загрузка операций…</p>`;
+    lastMapFieldOperations = [];
+    try {
+        const res = await fetch(apiPath(`/api/field-work/fields/${idStr}/items`), fetchOpts);
+        if (res.status === 403 || res.status === 401) {
+            body.innerHTML = `<p class="muted font-sm m-0">Просмотр операций доступен агроному и администратору организации.</p>`;
+            return;
+        }
+        if (!res.ok) {
+            body.innerHTML = `<p class="muted font-sm m-0">Не удалось загрузить операции (HTTP ${res.status}).</p>`;
+            return;
+        }
+        const items = await res.json();
+        lastMapFieldOperations = [...items].sort((a, b) => {
+            const ta = new Date(a.operationAt).getTime();
+            const tb = new Date(b.operationAt).getTime();
+            return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta);
+        });
+        const catalog = await ensureFieldWorkCatalog();
+        body.innerHTML = buildMapOperationFiltersHtml(catalog) + `<div data-map-op-table-host></div>`;
+        bindMapOperationFilters(body);
+        renderMapOperationsTable(body, lastMapFieldOperations);
+        const hint = body.querySelector("[data-map-op-filter-hint]");
+        if (hint && lastMapFieldOperations.length) {
+            hint.textContent = `Показано операций: ${lastMapFieldOperations.length}`;
+        }
+    } catch (_e) {
+        body.innerHTML = `<p class="muted font-sm m-0">Ошибка сети при загрузке операций.</p>`;
+    }
+}
+
+function bindFieldOperationsMapExpanders(body) {
+    body.querySelectorAll(".field-op-map-toggle").forEach(btn => {
+        btn.addEventListener("click", async () => {
+            const opId = btn.getAttribute("data-op-id");
+            const detailRow = body.querySelector(`tr.field-op-map-detail[data-op-detail-for="${opId}"]`);
+            if (!detailRow) return;
+            const expanded = btn.getAttribute("aria-expanded") === "true";
+            if (expanded) {
+                btn.setAttribute("aria-expanded", "false");
+                detailRow.classList.add("hidden");
+                return;
+            }
+            body.querySelectorAll(".field-op-map-toggle[aria-expanded='true']").forEach(other => {
+                if (other === btn) return;
+                other.setAttribute("aria-expanded", "false");
+                const otherId = other.getAttribute("data-op-id");
+                body.querySelector(`tr.field-op-map-detail[data-op-detail-for="${otherId}"]`)?.classList.add("hidden");
+            });
+            btn.setAttribute("aria-expanded", "true");
+            detailRow.classList.remove("hidden");
+            const inner = detailRow.querySelector(".field-op-map-detail-inner");
+            if (!inner || inner.dataset.loaded === "1") return;
+            inner.textContent = "Загрузка журнала…";
+            try {
+                const res = await fetch(apiPath(`/api/field-work/items/${opId}`), fetchOpts);
+                if (!res.ok) {
+                    inner.innerHTML = `<span class="muted font-sm">Не удалось загрузить журнал (HTTP ${res.status}).</span>`;
+                    return;
+                }
+                const detail = await res.json();
+                inner.dataset.loaded = "1";
+                inner.innerHTML = renderFieldOperationStatusHistoryHtml(detail.statusHistory || []);
+            } catch (_e) {
+                inner.innerHTML = `<span class="muted font-sm">Ошибка сети.</span>`;
+            }
+        });
+    });
+}
+
+function renderFieldOperationStatusHistoryHtml(history) {
+    if (!history.length) {
+        return `<p class="muted font-sm m-0">Записей в журнале статусов нет.</p>`;
+    }
+    return `
+        <ul class="field-op-status-history">
+            ${history.map(h => `
+                <li class="field-op-status-history-item">
+                    <span class="field-op-status-history-dot" aria-hidden="true"></span>
+                    <div class="field-op-status-history-body">
+                        <strong>${escapeHtml(h.statusTitleRu || h.status)}</strong>
+                        <span class="field-op-status-history-time">${formatFieldWorkDateTime(h.changedAt)}</span>
+                        ${h.userDisplayName ? `<span class="field-op-status-history-user">${escapeHtml(h.userDisplayName)}</span>` : ""}
+                        ${h.note ? `<p class="field-op-status-history-note">${escapeHtml(h.note)}</p>` : ""}
+                    </div>
+                </li>
+            `).join("")}
+        </ul>
+    `;
+}
+
+function refreshFieldHistoryPanelBody() {
+    if (fieldHistoryPanelFieldId == null) return;
+    if (fieldHistoryPanelMode === "operations") {
+        renderFieldOperationsHistoryBody(fieldHistoryPanelFieldId, fieldHistoryPanelFieldName);
+    } else {
+        renderFieldCropHistoryBody(fieldHistoryPanelFieldId, fieldHistoryPanelFieldName);
+    }
+    updateFieldHistoryPanelTabs();
+}
+
+function openFieldHistoryPanel(fieldId, fieldName, mode) {
     const panel = ensureFieldHistoryPanel();
     if (!panel) return;
-    renderFieldHistoryPanel(fieldId, fieldName);
+    fieldHistoryPanelFieldId = String(fieldId);
+    fieldHistoryPanelFieldName = fieldName || getFieldDisplayName(fieldId);
+    fieldHistoryPanelMode = mode === "operations" ? "operations" : "crop";
+    refreshFieldHistoryPanelBody();
     syncFieldHistoryPanelLayout();
     panel.classList.add("open");
+}
+
+function openFieldOperationsHistoryPanel(fieldId, fieldName) {
+    openFieldHistoryPanel(fieldId, fieldName, "operations");
 }
 
 function closeFieldHistoryPanel() {
@@ -656,6 +965,10 @@ function closeFieldHistoryPanel() {
 
 function ensureFieldHistoryPanel() {
     let panel = document.getElementById("field-history-panel");
+    if (panel && !panel.querySelector("#field-history-tabs")) {
+        panel.remove();
+        panel = null;
+    }
     if (panel) return panel;
     panel = document.createElement("section");
     panel.id = "field-history-panel";
@@ -663,13 +976,27 @@ function ensureFieldHistoryPanel() {
     panel.innerHTML = `
         <div class="field-history-resize-handle" id="field-history-resize-handle" title="Изменить высоту"></div>
         <div class="field-history-header">
-            <div class="field-history-title" id="field-history-title">История поля</div>
+            <div class="field-history-header-main">
+                <div class="field-history-title" id="field-history-title">История поля</div>
+                <div class="field-history-tabs hidden" id="field-history-tabs">
+                    <button type="button" class="field-history-tab" data-history-tab="crop">Посевы</button>
+                    <button type="button" class="field-history-tab" data-history-tab="operations">Операции</button>
+                </div>
+            </div>
             <button type="button" class="field-history-close" id="field-history-close" aria-label="Закрыть">×</button>
         </div>
         <div class="field-history-body" id="field-history-body"></div>
     `;
     document.body.appendChild(panel);
     document.getElementById("field-history-close")?.addEventListener("click", closeFieldHistoryPanel);
+    document.getElementById("field-history-tabs")?.querySelectorAll("[data-history-tab]").forEach(btn => {
+        btn.addEventListener("click", () => {
+            const mode = btn.getAttribute("data-history-tab");
+            if (!mode || mode === fieldHistoryPanelMode) return;
+            fieldHistoryPanelMode = mode;
+            refreshFieldHistoryPanelBody();
+        });
+    });
 
     const handle = document.getElementById("field-history-resize-handle");
     if (!handle) return panel;
@@ -755,6 +1082,8 @@ function ensureFieldContextMenu() {
     const existing = document.getElementById("field-context-menu");
     if (existing && (
         !existing.querySelector("[data-action='toggle-terrain']")
+        || !existing.querySelector("[data-action='show-operations']")
+        || !existing.querySelector("[data-action='open-reports']")
         || !existing.querySelector(".field-context-menu-layers")
         || !existing.querySelector(".field-context-menu-analytics")
         || !existing.querySelector(".field-context-menu-map")
@@ -769,7 +1098,9 @@ function ensureFieldContextMenu() {
         <div data-field-title class="field-context-menu-title"></div>
         <div class="field-context-menu-section field-context-menu-map">
             <div class="field-context-menu-label">Карта</div>
-            <button type="button" data-action="show-history">Показать историю</button>
+            <button type="button" data-action="show-history">История посевов</button>
+            <button type="button" data-action="show-operations" class="field-context-menu-operations">История операций</button>
+            <button type="button" data-action="open-reports" class="field-context-menu-reports">Отчёт по полю</button>
         </div>
         <div class="field-context-menu-section field-context-menu-layers">
             <div class="field-context-menu-label">Слои на карте</div>
@@ -787,7 +1118,20 @@ function ensureFieldContextMenu() {
     menu.querySelector("[data-action='show-history']")?.addEventListener("click", () => {
         if (fieldContextMenuTargetId != null) {
             const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === String(fieldContextMenuTargetId));
-            openFieldHistoryPanel(fieldContextMenuTargetId, feature?.properties?.name);
+            openFieldHistoryPanel(fieldContextMenuTargetId, feature?.properties?.name, "crop");
+        }
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='show-operations']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) {
+            const feature = loadedFieldsGeoJson?.features?.find(f => getFeatureFieldId(f) === String(fieldContextMenuTargetId));
+            openFieldOperationsHistoryPanel(fieldContextMenuTargetId, feature?.properties?.name);
+        }
+        hideFieldContextMenu();
+    });
+    menu.querySelector("[data-action='open-reports']")?.addEventListener("click", () => {
+        if (fieldContextMenuTargetId != null) {
+            window.location.href = `/org/reports?fieldId=${encodeURIComponent(fieldContextMenuTargetId)}`;
         }
         hideFieldContextMenu();
     });
@@ -947,6 +1291,74 @@ function onFieldLayerContextMenu(e) {
     showFieldContextMenu(e.originalEvent.clientX, e.originalEvent.clientY, fieldId, name);
 }
 
+// Открыть контекстное меню поля по координатам экрана (для тач-устройств — long-press).
+function openFieldContextMenuAt(clientX, clientY) {
+    if (!map || isMeasuring || window.geoFieldIntakeActive || window.geoImportPreviewActive) return;
+    const rect = map.getCanvas().getBoundingClientRect();
+    const point = [clientX - rect.left, clientY - rect.top];
+    const feats = map.queryRenderedFeatures(point, { layers: ["fields-fill"] });
+    if (!feats.length) return;
+    if (activeFieldPopup) {
+        suppressPopupCloseHighlightReset = true;
+        activeFieldPopup.remove();
+        activeFieldPopup = null;
+        activeFieldPopupFieldId = null;
+        suppressPopupCloseHighlightReset = false;
+    }
+    const feature = feats[0];
+    const fieldId = getFeatureFieldId(feature);
+    applyFieldHighlight(fieldId);
+    const name = feature.properties?.name || `Поле #${fieldId}`;
+    showFieldContextMenu(clientX, clientY, fieldId, name);
+}
+
+let longPressTimer = null;
+let longPressStart = null;
+let longPressBound = false;
+
+// Долгое нажатие пальцем по полю = аналог ПКМ (на телефонах нет правой кнопки).
+function bindLongPressContextMenu() {
+    if (longPressBound || !map) return;
+    const canvas = map.getCanvas();
+    const MOVE_THRESHOLD = 12;
+    const HOLD_MS = 500;
+
+    const cancelLongPress = () => {
+        if (longPressTimer) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+        }
+        longPressStart = null;
+    };
+
+    canvas.addEventListener("touchstart", (e) => {
+        if (e.touches.length !== 1) {
+            cancelLongPress();
+            return;
+        }
+        const t = e.touches[0];
+        longPressStart = { x: t.clientX, y: t.clientY };
+        if (longPressTimer) clearTimeout(longPressTimer);
+        longPressTimer = setTimeout(() => {
+            longPressTimer = null;
+            if (longPressStart) openFieldContextMenuAt(longPressStart.x, longPressStart.y);
+        }, HOLD_MS);
+    }, { passive: true });
+
+    canvas.addEventListener("touchmove", (e) => {
+        if (!longPressStart || !e.touches.length) return;
+        const t = e.touches[0];
+        if (Math.abs(t.clientX - longPressStart.x) > MOVE_THRESHOLD
+            || Math.abs(t.clientY - longPressStart.y) > MOVE_THRESHOLD) {
+            cancelLongPress();
+        }
+    }, { passive: true });
+
+    canvas.addEventListener("touchend", cancelLongPress, { passive: true });
+    canvas.addEventListener("touchcancel", cancelLongPress, { passive: true });
+    longPressBound = true;
+}
+
 function bindFieldLayerHandlers() {
     if (!map) return;
     map.off("click", "fields-fill", onFieldLayerClick);
@@ -955,6 +1367,7 @@ function bindFieldLayerHandlers() {
     map.on("click", "fields-fill", onFieldLayerClick);
     map.on("contextmenu", "fields-fill", onFieldLayerContextMenu);
     map.on("click", onMapClickClearFieldSelection);
+    bindLongPressContextMenu();
 }
 
 function populateCropFilterOptions(geojson) {

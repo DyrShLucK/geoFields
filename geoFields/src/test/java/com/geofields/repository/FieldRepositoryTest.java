@@ -46,10 +46,7 @@ class FieldRepositoryTest {
                         null,
                         null,
                         null,
-                        2024,
-                        null,
-                        null,
-                        null
+                        2024
                 )
         );
 

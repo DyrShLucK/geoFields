@@ -1,16 +1,27 @@
 package com.geofields.service;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geofields.dto.imports.ShapefileImportResponse;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+@ExtendWith(MockitoExtension.class)
 class ShapefileImportServiceTest {
 
-    private final ShapefileImportService service = new ShapefileImportService(new ObjectMapper());
+    @Mock
+    private GeojsonAgentClient geojsonAgentClient;
+
+    @InjectMocks
+    private ShapefileImportService service;
 
     @Test
     void importFromArchive_rejectsNullFile() {
@@ -38,25 +49,14 @@ class ShapefileImportServiceTest {
     }
 
     @Test
-    void importFromArchive_acceptsZipByContentType() {
-        MockMultipartFile zip = new MockMultipartFile("file", "upload.bin", "application/zip", new byte[]{1, 2, 3});
-
-        ShapefileImportResponse response = service.importFromArchive(zip);
-
-        assertThat(response.fields()).isNotNull();
-        assertThat(response.fields().features()).isNotEmpty();
-        assertThat(response.fields().features().getFirst().properties().name()).isNotBlank();
-        assertThat(response.crops()).isNotNull();
-    }
-
-    @Test
-    void importFromArchive_readsStubGeoJsonFromClasspath() {
+    void importFromArchive_delegatesToGeojsonAgent() {
         MockMultipartFile zip = new MockMultipartFile("file", "import.zip", "application/zip", new byte[]{0x50, 0x4b});
+        ShapefileImportResponse expected = ImportTestFixtures.sampleImportResponse();
+        when(geojsonAgentClient.convertArchive(any())).thenReturn(expected);
 
         ShapefileImportResponse response = service.importFromArchive(zip);
 
-        assertThat(response.fields().type()).isEqualTo("FeatureCollection");
-        assertThat(response.fields().features().size()).isGreaterThan(1);
-        assertThat(response.fields().features().getFirst().geometry().type()).isEqualTo("Polygon");
+        assertThat(response).isSameAs(expected);
+        verify(geojsonAgentClient).convertArchive(zip);
     }
 }

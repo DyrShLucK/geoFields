@@ -7,6 +7,7 @@ import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.errors.ErrorResponseException;
+import io.minio.errors.MinioException;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,8 +15,11 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -157,7 +161,7 @@ public class NdviTileCacheService {
                 log.warn("NDVI tile cache MinIO read error for {}: {}", key, code);
             }
             return null;
-        } catch (Exception e) {
+        } catch (MinioException | IOException | GeneralSecurityException e) {
             log.warn("NDVI tile cache MinIO read failed for {}: {}", key, e.getMessage());
             return null;
         }
@@ -173,7 +177,7 @@ public class NdviTileCacheService {
                     .stream(in, png.length, -1)
                     .build());
             log.debug("NDVI tile cache PUT minio: {} ({} bytes)", key, png.length);
-        } catch (Exception e) {
+        } catch (MinioException | IOException | GeneralSecurityException e) {
             log.warn("NDVI tile cache MinIO PUT failed for {}: {}", key, e.getMessage());
         }
     }
@@ -181,16 +185,12 @@ public class NdviTileCacheService {
     private void verifyMinioRoundTrip() {
         String probeKey = "tiles/__probe__/healthcheck.bin";
         byte[] payload = "ok".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        try {
-            putToMinio(probeKey, payload);
-            byte[] back = getFromMinio(probeKey);
-            if (back != null && back.length == payload.length) {
-                log.info("NDVI tile cache: MinIO read/write probe OK");
-            } else {
-                log.error("NDVI tile cache: MinIO read/write probe FAILED");
-            }
-        } catch (Exception e) {
-            log.error("NDVI tile cache: MinIO probe error: {}", e.getMessage());
+        putToMinio(probeKey, payload);
+        byte[] back = getFromMinio(probeKey);
+        if (back != null && back.length == payload.length) {
+            log.info("NDVI tile cache: MinIO read/write probe OK");
+        } else {
+            log.error("NDVI tile cache: MinIO read/write probe FAILED");
         }
     }
 
@@ -208,13 +208,13 @@ public class NdviTileCacheService {
                         .build());
                 log.info("Created MinIO bucket: {}", props.getBucketTiles());
             }
-        } catch (Exception e) {
+        } catch (MinioException | IOException | GeneralSecurityException e) {
             log.error("Cannot ensure MinIO bucket {} at {}: {}",
                     props.getBucketTiles(), props.getEndpoint(), e.getMessage());
         }
     }
 
-    private static byte[] readAllBytes(InputStream is) throws Exception {
+    private static byte[] readAllBytes(InputStream is) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         byte[] buf = new byte[8192];
         int r;
@@ -229,7 +229,7 @@ public class NdviTileCacheService {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] digest = md.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(digest);
-        } catch (Exception e) {
+        } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
         }
     }

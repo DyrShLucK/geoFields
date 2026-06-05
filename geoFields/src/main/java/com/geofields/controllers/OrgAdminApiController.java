@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/org/admin")
@@ -90,14 +91,13 @@ public class OrgAdminApiController {
             @RequestBody RoleUpdateRequest body) {
         long actorUserId = user.getUserId();
         long orgId = user.getOrganizationId();
-        UserRole newRole;
-        try {
-            newRole = UserRole.valueOf(body.role() != null ? body.role().trim().toUpperCase() : "");
-        } catch (IllegalArgumentException ex) {
+        Optional<UserRole> parsedRole = parseUserRole(body.role());
+        if (parsedRole.isEmpty()) {
             log.warn("userId={} orgId={} action=update_role targetUserId={} requestedRole={} success=false reason=invalid_role",
                     actorUserId, orgId, body.userId(), body.role());
             return ResponseEntity.ok(new ActionResult(false, "Неизвестная роль."));
         }
+        UserRole newRole = parsedRole.get();
         ActionResult result = adminOrganizationUserService.updateMemberRole(user, body.userId(), newRole);
         log.info("userId={} orgId={} action=update_role targetUserId={} role={} success={}",
                 actorUserId, orgId, body.userId(), newRole, result.ok());
@@ -136,5 +136,18 @@ public class OrgAdminApiController {
         log.info("userId={} orgId={} action=delete_field fieldId={} success=true",
                 actorUserId, orgId, fieldId);
         return ResponseEntity.ok(new ActionResult(true, "Поле удалено."));
+    }
+
+    private static Optional<UserRole> parseUserRole(String rawRole) {
+        if (rawRole == null || rawRole.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = rawRole.trim().toUpperCase();
+        for (UserRole value : UserRole.values()) {
+            if (value.name().equals(normalized)) {
+                return Optional.of(value);
+            }
+        }
+        return Optional.empty();
     }
 }

@@ -37,11 +37,9 @@ public class ElevationController {
     public ResponseEntity<?> prepareElevation(@PathVariable String field_id) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
         if (org.isError()) return ValidationResponses.castError(org.errorResponse());
-        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(field_id);
+        RequestValidationService.ValidationResult<Long> field =
+                validationService.requireOwnedFieldId(field_id, org.value(), false);
         if (field.isError()) return ValidationResponses.castError(field.errorResponse());
-        RequestValidationService.ValidationResult<Void> fieldAccess =
-                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
-        if (fieldAccess.isError()) return ValidationResponses.castError(fieldAccess.errorResponse());
         try {
             return ResponseEntity.ok(elevationPythonClient.prepareElevation(field.value()));
         } catch (RestClientResponseException ex) {
@@ -79,11 +77,11 @@ public class ElevationController {
             boolean elevation) {
         RequestValidationService.ValidationResult<Long> org = validationService.requireOrganizationId();
         if (org.isError()) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        RequestValidationService.ValidationResult<Long> field = validationService.parseFieldId(fieldId);
-        if (field.isError()) return ResponseEntity.badRequest().build();
-        RequestValidationService.ValidationResult<Void> fieldAccess =
-                validationService.ensureFieldBelongsToOrganization(field.value(), org.value(), false);
-        if (fieldAccess.isError()) return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        RequestValidationService.ValidationResult<Long> field =
+                validationService.requireOwnedFieldId(fieldId, org.value(), false);
+        if (field.isError()) {
+            return ResponseEntity.status(field.errorResponse().getStatusCode()).build();
+        }
         try {
             NdviTileFetchService.FetchResult result = elevation
                     ? terrainTileFetchService.fetchElevationTile(fieldId, z, x, y)

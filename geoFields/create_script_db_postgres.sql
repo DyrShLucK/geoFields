@@ -9,8 +9,14 @@ CREATE EXTENSION IF NOT EXISTS postgis;
 -- ============================================
 -- УДАЛЕНИЕ (порядок с учётом внешних ключей)
 -- ============================================
-DROP TABLE IF EXISTS field_analytics CASCADE;
-DROP TABLE IF EXISTS ndvi_data CASCADE;
+DROP TABLE IF EXISTS field_operation_status_history CASCADE;
+DROP TABLE IF EXISTS field_operations CASCADE;
+DROP TABLE IF EXISTS field_operation_category CASCADE;
+DROP TABLE IF EXISTS field_operation_status CASCADE;
+DROP TABLE IF EXISTS field_analytic CASCADE;
+DROP TABLE IF EXISTS scene_indices CASCADE;
+DROP TABLE IF EXISTS field_scenes CASCADE;
+DROP TABLE IF EXISTS scenes CASCADE;
 DROP TABLE IF EXISTS field_crops CASCADE;
 DROP TABLE IF EXISTS field_intersections CASCADE;
 DROP TABLE IF EXISTS org_registration_invites CASCADE;
@@ -157,34 +163,98 @@ CREATE TABLE field_crops (
 );
 
 -- ============================================
--- 6. NDVI (ссылки на тайлы / растры)
+-- 5.1 ОПЕРАЦИИ ПО ПОЛЮ (агротехнические мероприятия)
 -- ============================================
-CREATE TABLE ndvi_data (
-    id SERIAL PRIMARY KEY,
-    url TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE field_operation_status (
+    code        VARCHAR(32) PRIMARY KEY,
+    title_ru    VARCHAR(100) NOT NULL,
+    sort_order  SMALLINT NOT NULL DEFAULT 0
 );
 
--- ============================================
--- 7. АНАЛИТИКА ПОЛЕЙ (привязка к строке field_crops и NDVI)
--- ============================================
-CREATE TABLE field_analytics (
-    id SERIAL PRIMARY KEY,
-    field_crop_id INTEGER NOT NULL,
-    ndvi_id INTEGER,
-    record_date DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+INSERT INTO field_operation_status (code, title_ru, sort_order) VALUES
+    ('PLANNED',     'Запланировано', 10),
+    ('STARTED',     'Начато',        20),
+    ('IN_PROGRESS', 'В процессе',    30),
+    ('COMPLETED',   'Завершено',     40),
+    ('FROZEN',      'Заморожено',    50),
+    ('CANCELLED',   'Отменено',      60);
 
-    CONSTRAINT fk_analytics_field_crop
-        FOREIGN KEY (field_crop_id)
-            REFERENCES field_crops (history_id)
+CREATE TABLE field_operation_category (
+    code        VARCHAR(50) PRIMARY KEY,
+    title_ru    VARCHAR(100) NOT NULL,
+    sort_order  SMALLINT NOT NULL DEFAULT 0
+);
+
+INSERT INTO field_operation_category (code, title_ru, sort_order) VALUES
+    ('FERTILIZATION', 'Внесение удобрений', 10),
+    ('SOWING',        'Посев',              20),
+    ('HARVEST',       'Уборка урожая',      30),
+    ('TILLAGE',       'Обработка почвы',    40),
+    ('IRRIGATION',    'Полив / орошение',   50),
+    ('PEST_CONTROL',  'Защита растений',    60),
+    ('SCOUTING',      'Осмотр поля',        70),
+    ('OTHER',         'Прочее',             99);
+
+CREATE TABLE field_operations (
+    id              SERIAL PRIMARY KEY,
+    field_id        INTEGER NOT NULL,
+    organization_id INTEGER NOT NULL,
+    user_id         INTEGER,
+    operation_at    TIMESTAMP NOT NULL,
+    name            VARCHAR(255) NOT NULL,
+    category        VARCHAR(50) NOT NULL,
+    status          VARCHAR(32) NOT NULL DEFAULT 'PLANNED',
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_field_operations_field
+        FOREIGN KEY (field_id)
+            REFERENCES fields (id)
             ON DELETE CASCADE,
 
-    CONSTRAINT fk_analytics_ndvi
-        FOREIGN KEY (ndvi_id)
-            REFERENCES ndvi_data (id)
+    CONSTRAINT fk_field_operations_organization
+        FOREIGN KEY (organization_id)
+            REFERENCES organizations (id)
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_field_operations_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id)
+            ON DELETE SET NULL,
+
+    CONSTRAINT fk_field_operations_category
+        FOREIGN KEY (category)
+            REFERENCES field_operation_category (code),
+
+    CONSTRAINT fk_field_operations_status
+        FOREIGN KEY (status)
+            REFERENCES field_operation_status (code)
+);
+
+CREATE TABLE field_operation_status_history (
+    id              SERIAL PRIMARY KEY,
+    operation_id    INTEGER NOT NULL,
+    status          VARCHAR(32) NOT NULL,
+    changed_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    user_id         INTEGER,
+    note            VARCHAR(500),
+
+    CONSTRAINT fk_field_op_status_hist_operation
+        FOREIGN KEY (operation_id)
+            REFERENCES field_operations (id)
+            ON DELETE CASCADE,
+
+    CONSTRAINT fk_field_op_status_hist_status
+        FOREIGN KEY (status)
+            REFERENCES field_operation_status (code),
+
+    CONSTRAINT fk_field_op_status_hist_user
+        FOREIGN KEY (user_id)
+            REFERENCES users (id)
             ON DELETE SET NULL
 );
+
+-- NDVI/сцены: таблицы scenes, field_analytic и др. создаются миграциями Flyway (sql/V2+, V4+).
 
 -- ============================================
 -- ИНДЕКСЫ
@@ -195,12 +265,18 @@ CREATE INDEX idx_field_crops_crop_id ON field_crops (crop_id);
 CREATE INDEX idx_field_crops_field_id ON field_crops (field_id);
 CREATE INDEX idx_field_crops_organization_id ON field_crops (organization_id);
 CREATE INDEX idx_field_crops_crop_year ON field_crops (crop_year);
+CREATE INDEX idx_field_operations_field_id ON field_operations (field_id);
+CREATE INDEX idx_field_operations_org_id ON field_operations (organization_id);
+CREATE INDEX idx_field_operations_operation_at ON field_operations (operation_at DESC);
+CREATE INDEX idx_field_operations_status ON field_operations (status);
+CREATE INDEX idx_field_operations_category ON field_operations (category);
+CREATE INDEX idx_field_operations_field_org_at
+    ON field_operations (field_id, organization_id, operation_at DESC);
+CREATE INDEX idx_field_op_status_hist_operation
+    ON field_operation_status_history (operation_id, changed_at ASC);
 CREATE INDEX idx_field_intersections_org ON field_intersections (organization_id);
 CREATE INDEX idx_field_intersections_left ON field_intersections (field_id_left);
 CREATE INDEX idx_field_intersections_right ON field_intersections (field_id_right);
-CREATE INDEX idx_analytics_field_crop_id ON field_analytics (field_crop_id);
-CREATE INDEX idx_analytics_ndvi_id ON field_analytics (ndvi_id);
-CREATE INDEX idx_analytics_record_date ON field_analytics (record_date);
 CREATE INDEX idx_fields_geom ON fields USING GIST (geom);
 
 -- ============================================
@@ -213,9 +289,13 @@ COMMENT ON TABLE field_intersections IS 'Пары полей одной орга
 COMMENT ON TABLE users IS 'Пользователи системы';
 COMMENT ON TABLE org_registration_invites IS 'Одноразовые токены регистрации в организацию';
 COMMENT ON TABLE field_crops IS 'История посевов: культура, поле, организация, урожайность';
-COMMENT ON TABLE ndvi_data IS 'Ссылки на NDVI (тайлы и т.п.)';
-COMMENT ON TABLE field_analytics IS 'Записи аналитики по строке field_crops, опционально с NDVI';
-
+COMMENT ON TABLE field_operation_status IS 'Справочник статусов операции по полю';
+COMMENT ON TABLE field_operation_category IS 'Справочник категорий операции (тип мероприятия)';
+COMMENT ON TABLE field_operations IS 'Операции по полю: дата/время, название, категория, статус, автор';
+COMMENT ON COLUMN field_operations.operation_at IS 'Дата и время выполнения (плановая или фактическая)';
+COMMENT ON COLUMN field_operations.name IS 'Наименование операции, напр. «Внесение NPK 120 кг/га»';
+COMMENT ON COLUMN field_operations.user_id IS 'Пользователь, создавший или зафиксировавший запись';
+COMMENT ON TABLE field_operation_status_history IS 'Журнал переходов статуса операции по полю';
 COMMENT ON COLUMN users.password_hash IS 'Хэш пароля (bcrypt и т.п.)';
 COMMENT ON COLUMN users.is_active IS 'Аккаунт активен';
 COMMENT ON COLUMN fields.geom IS 'MultiPolygon, SRID 4326 (WGS 84)';
@@ -225,6 +305,3 @@ COMMENT ON COLUMN field_intersections.field_id_right IS 'Больший id по�
 COMMENT ON COLUMN field_crops.sown_area_ha IS 'Посевная площадь, га';
 COMMENT ON COLUMN field_crops.harvested_area_ha IS 'Убранная площадь, га';
 COMMENT ON COLUMN field_crops.actual_yield IS 'Фактическая урожайность (как в вашей методике)';
-COMMENT ON COLUMN field_analytics.field_crop_id IS 'FK на field_crops.history_id';
-COMMENT ON COLUMN field_analytics.ndvi_id IS 'Ссылка на ndvi_data (может быть NULL)';
-COMMENT ON COLUMN ndvi_data.url IS 'URL тайлового слоя или файла';

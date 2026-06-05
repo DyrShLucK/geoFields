@@ -2,6 +2,7 @@ package com.geofields.configuration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -80,13 +81,35 @@ public class SecurityConfig {
                                 "/api/org/manager",
                                 "/api/org/manager/**")
                         .hasAnyRole("ORG_MANAGER", "ORG_ADMIN")
+                        // Импорт полей — только агроном/админ
+                        .requestMatchers("/api/fields/import/**")
+                        .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
+                        // Создание/изменение/удаление севооборота и операций — агроном/админ
+                        .requestMatchers(HttpMethod.POST, "/api/org/agronomist/**", "/api/field-work/**")
+                        .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/org/agronomist/**", "/api/field-work/**")
+                        .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/org/agronomist/**", "/api/field-work/**")
+                        .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
+                        // Страницы-редакторы (севооборот и операции) — агроном/админ
                         .requestMatchers(
                                 "/org/agronomist",
                                 "/org/agronomist/**",
-                                "/api/org/agronomist",
-                                "/api/org/agronomist/**",
-                                "/api/fields/import/**")
+                                "/org/field-work",
+                                "/org/field-work/**")
                         .hasAnyRole("AGRONOMIST", "ORG_ADMIN")
+                        // Просмотр (GET) операций, истории и отчётов — доступно и обычному пользователю
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/org/agronomist/**",
+                                "/api/field-work/**",
+                                "/api/reports/**")
+                        .hasAnyRole("USER", "AGRONOMIST", "ORG_ADMIN")
+                        .requestMatchers(
+                                "/org/reports",
+                                "/org/reports/**",
+                                "/api/reports",
+                                "/api/reports/**")
+                        .hasAnyRole("USER", "AGRONOMIST", "ORG_ADMIN")
                         .anyRequest().authenticated()
                 )
                 .formLogin(form -> form

@@ -19,7 +19,7 @@ import java.util.List;
 public class JdbcFieldRepository implements FieldRepository {
     private static final Logger log = LoggerFactory.getLogger(JdbcFieldRepository.class);
 
-    /** Общий SELECT: поле, GeoJSON-контур, история посева и последний NDVI-слой. */
+    /** Общий SELECT: поле, GeoJSON-контур и история посева (без NDVI — тайлы через Python). */
     private static final String HISTORY_SELECT_COLUMNS = """
             SELECT f.id                                      AS field_id,
                    f.field_name                              AS field_name,
@@ -39,29 +39,12 @@ public class JdbcFieldRepository implements FieldRepository {
                    fc.forecasted_yield                       AS forecasted_yield,
                    fc.source_data                            AS source_data,
                    fc.sowing_details                         AS sowing_details,
-                   fc.crop_year                              AS crop_year,
-                   fa_latest.analytics_date                  AS analytics_date,
-                   fa_latest.ndvi_url                        AS ndvi_url,
-                   fa_latest.ndvi_created_at                 AS ndvi_created_at
+                   fc.crop_year                              AS crop_year
             """;
 
     /** Подтягивает название культуры из справочника crops. */
     private static final String JOIN_CROPS_ON_CROP_ID = """
             LEFT JOIN crops c ON c.crop_id = fc.crop_id
-            """;
-
-    /** Последняя по дате аналитика и ссылка на NDVI для записи истории посева. */
-    private static final String JOIN_LATEST_NDVI_ANALYTICS = """
-            LEFT JOIN LATERAL (
-               SELECT fa.record_date AS analytics_date,
-                      nd.url         AS ndvi_url,
-                      nd.created_at  AS ndvi_created_at
-               FROM field_analytics fa
-               LEFT JOIN ndvi_data nd ON nd.id = fa.ndvi_id
-               WHERE fa.field_crop_id = fc.history_id
-               ORDER BY fa.record_date DESC, fa.id DESC
-               LIMIT 1
-            ) fa_latest ON TRUE
             """;
 
     /** Сортировка: поле, год культуры, id записи истории. */
@@ -73,7 +56,7 @@ public class JdbcFieldRepository implements FieldRepository {
     private static final String GET_FIELDS_WITH_HISTORY_SQL = HISTORY_SELECT_COLUMNS + """
             FROM fields f
             INNER JOIN field_crops fc ON fc.field_id = f.id
-            """ + JOIN_CROPS_ON_CROP_ID + JOIN_LATEST_NDVI_ANALYTICS + """
+            """ + JOIN_CROPS_ON_CROP_ID + """
             WHERE fc.organization_id = ?
               AND COALESCE(f.is_active, TRUE)
             """ + HISTORY_ORDER_BY;
@@ -90,7 +73,7 @@ public class JdbcFieldRepository implements FieldRepository {
                (fi.field_id_right = ? AND f.id = fi.field_id_left)
             )
             LEFT JOIN field_crops fc ON fc.field_id = f.id AND fc.organization_id = fi.organization_id
-            """ + JOIN_CROPS_ON_CROP_ID + JOIN_LATEST_NDVI_ANALYTICS + """
+            """ + JOIN_CROPS_ON_CROP_ID + """
             WHERE fi.organization_id = ?
             """ + HISTORY_ORDER_BY;
 
@@ -113,10 +96,7 @@ public class JdbcFieldRepository implements FieldRepository {
             rs.getBigDecimal("forecasted_yield"),
             rs.getString("source_data"),
             rs.getString("sowing_details"),
-            rs.getObject("crop_year", Integer.class),
-            rs.getObject("analytics_date", java.time.LocalDate.class),
-            rs.getString("ndvi_url"),
-            rs.getObject("ndvi_created_at", java.time.LocalDateTime.class)
+            rs.getObject("crop_year", Integer.class)
     );
 
     private static final RowMapper<FieldGeometryConflictRow> FIELD_GEOMETRY_CONFLICT_ROW_MAPPER =
@@ -162,15 +142,10 @@ public class JdbcFieldRepository implements FieldRepository {
               AND organization_id = ?
             """;
 
-    /** Удаляет аналитику NDVI, привязанную к истории посевов поля. */
-    private static final String DELETE_FIELD_ANALYTICS_SQL = """
-            DELETE FROM field_analytics
-            WHERE field_crop_id IN (
-                SELECT history_id
-                FROM field_crops
-                WHERE field_id = ?
-                  AND organization_id = ?
-            )
+    /** Удаляет кэш NDVI Python (field_analytic) для поля. */
+    private static final String DELETE_FIELD_ANALYTIC_SQL = """
+            DELETE FROM field_analytic
+            WHERE field_id = ?
             """;
 
     /**
@@ -260,7 +235,7 @@ public class JdbcFieldRepository implements FieldRepository {
             return 0;
         }
         jdbcTemplate.update(DELETE_FIELD_INTERSECTIONS_BY_FIELD_SQL, fieldId, fieldId);
-        jdbcTemplate.update(DELETE_FIELD_ANALYTICS_SQL, fieldId, organizationId);
+        jdbcTemplate.update(DELETE_FIELD_ANALYTIC_SQL, fieldId);
         jdbcTemplate.update(DELETE_FIELD_CROPS_SQL, fieldId, organizationId);
         return jdbcTemplate.update(DELETE_FIELD_SQL, fieldId);
     }

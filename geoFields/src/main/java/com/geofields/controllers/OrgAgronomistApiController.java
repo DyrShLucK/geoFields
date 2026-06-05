@@ -40,6 +40,8 @@ import java.util.List;
 @RequestMapping("/api/org/agronomist")
 public class OrgAgronomistApiController {
     private static final Logger log = LoggerFactory.getLogger(OrgAgronomistApiController.class);
+    private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_OBSOLETE = "OBSOLETE";
 
     private final FieldRepository fieldRepository;
     private final FieldCropHistoryRepository fieldCropHistoryRepository;
@@ -186,17 +188,13 @@ public class OrgAgronomistApiController {
             return ResponseEntity.notFound().build();
         }
 
-        boolean active;
         String normalized = body.status().trim().toUpperCase();
-        if ("ACTIVE".equals(normalized)) {
-            active = true;
-        } else if ("OBSOLETE".equals(normalized)) {
-            active = false;
-        } else {
+        Boolean active = toActiveFlag(normalized);
+        if (active == null) {
             log.warn("userId={} orgId={} action=update_field_status fieldId={} status={} success=false reason=invalid_status",
                     actorUserId, orgId, fieldId, body.status());
             return ResponseEntity.badRequest()
-                    .body(new ActionMessageResponse("Допустимые статусы: ACTIVE, OBSOLETE"));
+                    .body(new ActionMessageResponse("Допустимые статусы: " + STATUS_ACTIVE + ", " + STATUS_OBSOLETE));
         }
 
         int updated = fieldRepository.updateFieldActiveStatus(fieldId, orgId, active);
@@ -270,5 +268,13 @@ public class OrgAgronomistApiController {
                 r.sourceData(),
                 r.sowingDetails(),
                 r.cropYear());
+    }
+
+    private static Boolean toActiveFlag(String status) {
+        return switch (status) {
+            case STATUS_ACTIVE -> true;
+            case STATUS_OBSOLETE -> false;
+            default -> null;
+        };
     }
 }

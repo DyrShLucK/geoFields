@@ -88,10 +88,7 @@ public class FieldGeoJsonAssembler {
                 row.forecastedYield(),
                 row.sourceData(),
                 row.sowingDetails(),
-                row.cropYear(),
-                row.analyticsDate(),
-                row.ndviUrl(),
-                row.ndviCreatedAt()
+                row.cropYear()
         );
     }
 
@@ -106,7 +103,7 @@ public class FieldGeoJsonAssembler {
     private JsonNode parseGeometry(String geometryJson) {
         try {
             return objectMapper.readTree(geometryJson);
-        } catch (Exception ex) {
+        } catch (JsonProcessingException ex) {
             throw new IllegalStateException("Некорректная геометрия в БД", ex);
         }
     }

@@ -30,10 +30,13 @@ public class RequestValidationService {
     }
 
     public ValidationResult<Long> parseFieldId(String fieldIdRaw) {
+        if (fieldIdRaw == null || fieldIdRaw.isBlank()) {
+            return ValidationResult.error(badRequest("Некорректный field_id"));
+        }
         try {
             return ValidationResult.ok(Long.parseLong(fieldIdRaw.trim()));
         } catch (NumberFormatException e) {
-            return ValidationResult.error(ResponseEntity.badRequest().body(Map.of("error", "Некорректный field_id")));
+            return ValidationResult.error(badRequest("Некорректный field_id"));
         }
     }
 
@@ -48,25 +51,48 @@ public class RequestValidationService {
         return ValidationResult.error(ResponseEntity.status(HttpStatus.NOT_FOUND).build());
     }
 
+    public ValidationResult<Long> requireOwnedFieldId(String fieldIdRaw, long orgId, boolean withBody) {
+        ValidationResult<Long> parsed = parseFieldId(fieldIdRaw);
+        if (parsed.isError()) {
+            return ValidationResult.error(parsed.errorResponse());
+        }
+        ValidationResult<Void> fieldAccess = ensureFieldBelongsToOrganization(parsed.value(), orgId, withBody);
+        if (fieldAccess.isError()) {
+            return ValidationResult.error(fieldAccess.errorResponse());
+        }
+        return ValidationResult.ok(parsed.value());
+    }
+
+    public ValidationResult<List<Long>> ensureFieldsBelongToOrganization(List<Long> fieldIds, long orgId, boolean withBody) {
+        for (Long fieldId : fieldIds) {
+            ValidationResult<Void> fieldAccess = ensureFieldBelongsToOrganization(fieldId, orgId, withBody);
+            if (fieldAccess.isError()) {
+                return ValidationResult.error(fieldAccess.errorResponse());
+            }
+        }
+        return ValidationResult.ok(fieldIds);
+    }
+
     public ValidationResult<List<Long>> parseFieldIds(List<String> rawFieldIds) {
         try {
             List<Long> fieldIds = FieldIdRequestParser.parseFieldIds(rawFieldIds);
             if (fieldIds.isEmpty()) {
-                return ValidationResult.error(ResponseEntity.badRequest()
-                        .body(Map.of("error", "Укажите хотя бы одно поле")));
+                return ValidationResult.error(badRequest("Укажите хотя бы одно поле"));
             }
             return ValidationResult.ok(fieldIds);
         } catch (IllegalArgumentException e) {
-            return ValidationResult.error(ResponseEntity.badRequest().body(Map.of("error", e.getMessage())));
+            return ValidationResult.error(badRequest(e.getMessage()));
         }
     }
 
     public ValidationResult<LocalDate> parseDate(String dateRaw) {
+        if (dateRaw == null || dateRaw.isBlank()) {
+            return ValidationResult.error(badRequest("Некорректная дата, ожидается YYYY-MM-DD"));
+        }
         try {
             return ValidationResult.ok(LocalDate.parse(dateRaw.trim()));
         } catch (DateTimeParseException e) {
-            return ValidationResult.error(ResponseEntity.badRequest()
-                    .body(Map.of("error", "Некорректная дата, ожидается YYYY-MM-DD")));
+            return ValidationResult.error(badRequest("Некорректная дата, ожидается YYYY-MM-DD"));
         }
     }
 
@@ -97,6 +123,10 @@ public class RequestValidationService {
         public boolean isError() {
             return errorResponse != null;
         }
+    }
+
+    private static ResponseEntity<Map<String, String>> badRequest(String message) {
+        return ResponseEntity.badRequest().body(Map.of("error", message));
     }
 }
 

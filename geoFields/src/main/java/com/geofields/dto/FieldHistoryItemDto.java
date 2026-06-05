@@ -2,9 +2,8 @@ package com.geofields.dto;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 
-// Одна запись истории по полю: культура, агро-метрики и NDVI-ссылка.
+// Одна запись истории по полю: культура и агро-метрики (NDVI — через Python-прокси, не в GeoJSON).
 public record FieldHistoryItemDto(
         Long fieldCropId,
         Long cropId,
@@ -19,9 +18,6 @@ public record FieldHistoryItemDto(
         BigDecimal forecastedYield,
         String sourceData,
         String sowingDetails,
-        Integer cropYear,
-        LocalDate analyticsDate,
-        String ndviUrl,
-        LocalDateTime ndviCreatedAt
+        Integer cropYear
 ) {
 }

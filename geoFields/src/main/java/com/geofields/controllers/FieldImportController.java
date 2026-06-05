@@ -1,6 +1,5 @@
 package com.geofields.controllers;
 
-import com.geofields.dto.imports.ShapefileImportCommitResponse;
 import com.geofields.dto.imports.ShapefileImportResponse;
 import com.geofields.security.GeoFieldsUserDetails;
 import com.geofields.service.FieldImportSaveService;
@@ -78,7 +77,7 @@ public class FieldImportController {
             return ResponseEntity.ok(action.get());
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
-        } catch (RuntimeException e) {
+        } catch (IllegalStateException e) {
             log.error(errorLogMessage, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", clientErrorMessage));

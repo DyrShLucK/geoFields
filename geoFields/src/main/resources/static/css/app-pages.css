@@ -23,6 +23,10 @@ body {
     margin: 0 auto;
 }
 
+.geo-page-org--reports {
+    max-width: 1180px;
+}
+
 .geo-page-org--admin {
     max-width: 960px;
 }
@@ -481,6 +485,141 @@ body.geo-page-org--agronomist {
     border: 1px solid var(--border-color);
 }
 
+/* Страница операций по полям (/org/field-work) */
+.geo-page-org--field-work .field-work-form-grid {
+    margin-top: 8px;
+}
+
+.geo-page-org--field-work .field-work-filters {
+    margin: 12px 0 16px;
+    padding: 14px 16px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.geo-page-org--field-work .field-work-filters.is-collapsed {
+    display: none;
+}
+
+.geo-page-org--field-work .field-work-filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    align-items: flex-end;
+}
+
+.geo-page-org--field-work .field-work-filters-row .form-field {
+    min-width: 140px;
+    margin: 0;
+}
+
+.geo-page-org--field-work .field-work-filters-row .form-field--wide {
+    flex: 1 1 200px;
+    min-width: 180px;
+}
+
+.geo-page-org--field-work .field-work-filter-hint {
+    margin: 10px 0 0;
+}
+
+.geo-page-org--field-work .op-status-badge {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+}
+
+.geo-page-org--field-work .op-status-badge--IN_PROGRESS,
+.geo-page-org--field-work .op-status-badge--STARTED {
+    background: #eff6ff;
+    color: #1d4ed8;
+    border-color: #bfdbfe;
+}
+
+.geo-page-org--field-work .op-status-badge--COMPLETED {
+    background: #ecfdf5;
+    color: #047857;
+    border-color: #bbf7d0;
+}
+
+.geo-page-org--field-work .op-status-badge--FROZEN {
+    background: #f0f9ff;
+    color: #0369a1;
+    border-color: #bae6fd;
+}
+
+.geo-page-org--field-work .op-status-badge--CANCELLED {
+    background: #fef2f2;
+    color: #b91c1c;
+    border-color: #fecaca;
+}
+
+.geo-page-org--field-work .status-history-panel {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+.geo-page-org--field-work .status-history-list {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0 0 0 8px;
+    border-left: 2px solid #e2e8f0;
+}
+
+.geo-page-org--field-work .status-history-item {
+    position: relative;
+    padding: 0 0 20px 20px;
+    display: flex;
+    gap: 12px;
+}
+
+.geo-page-org--field-work .status-history-dot {
+    position: absolute;
+    left: -7px;
+    top: 4px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #334155;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #e2e8f0;
+}
+
+.geo-page-org--field-work .status-history-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 14px;
+}
+
+.geo-page-org--field-work .status-history-time {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.geo-page-org--field-work .status-history-user {
+    font-size: 12px;
+    color: #64748b;
+}
+
+.geo-page-org--field-work .status-history-note {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.geo-page-org--field-work .status-history-empty {
+    padding: 12px 0;
+    color: var(--text-muted);
+    font-size: 14px;
+}
+
 .geo-page-org--agronomist button.primary,
 .geo-page-org--agronomist .btn.primary {
     background: #334155;
@@ -546,6 +685,932 @@ body.geo-page-org--agronomist {
 
     .geo-page-org--agronomist .grid-inputs {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* Страница отчётов (/org/reports) */
+.geo-page-org--reports .reports-filters-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr;
+    gap: 24px;
+    margin-top: 12px;
+}
+
+.geo-page-org--reports .reports-period-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.geo-page-org--reports .reports-period-row .form-input {
+    flex: 1;
+    min-width: 130px;
+}
+
+.geo-page-org--reports .reports-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.geo-page-org--reports .reports-preset-btn {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+}
+
+.geo-page-org--reports .reports-fields-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.geo-page-org--reports .btn-linkish {
+    border: none;
+    background: none;
+    color: var(--accent-blue);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+}
+
+.geo-page-org--reports .reports-fields-checklist {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    margin-top: 8px;
+}
+
+.geo-page-org--reports .reports-field-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.geo-page-org--reports .reports-field-chip input {
+    accent-color: var(--accent-green);
+}
+
+.geo-page-org--reports .reports-filter-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 20px;
+    flex-wrap: wrap;
+}
+
+.geo-page-org--reports .reports-dashboard.is-collapsed {
+    display: none;
+}
+
+/* ===== Конструктор раскладки отчёта (GridStack) ===== */
+.geo-page-org--reports .reports-layout-hint {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    font-size: 13px;
+    color: #1e40af;
+}
+
+.geo-page-org--reports .reports-blocks-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px 20px;
+    padding: 14px 16px;
+    margin-bottom: 14px;
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+}
+
+.geo-page-org--reports .reports-blocks-panel__section h4 {
+    margin: 0 0 10px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+}
+
+.geo-page-org--reports .reports-blocks-panel__list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.geo-page-org--reports .reports-blocks-panel__list label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.geo-page-org--reports .reports-blocks-panel__list label.is-disabled {
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+.geo-page-org--reports .reports-layout-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.geo-page-org--reports .reports-layout-item {
+    width: 100%;
+}
+
+.geo-page-org--reports .reports-layout-item.reports-block--hidden {
+    display: none;
+}
+
+.geo-page-org--reports .reports-layout-item--ghost {
+    opacity: 0.45;
+}
+
+.geo-page-org--reports .reports-layout-item--drag {
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+}
+
+.geo-page-org--reports .reports-block {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.geo-page-org--reports .reports-block-chrome {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
+    background: linear-gradient(180deg, #fafbfc 0%, #fff 100%);
+}
+
+.geo-page-org--reports .reports-block-title {
+    margin: 0;
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 0;
+}
+
+.geo-page-org--reports .reports-block-chrome .reports-chart-sub {
+    flex-shrink: 0;
+}
+
+.geo-page-org--reports .reports-block-drag {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    background: #f1f5f9;
+    cursor: grab;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.geo-page-org--reports .reports-dashboard.is-layout-edit .reports-block-drag {
+    display: flex;
+}
+
+.geo-page-org--reports .reports-dashboard.is-layout-edit .reports-block {
+    outline: 2px dashed #93c5fd;
+    outline-offset: -2px;
+}
+
+.geo-page-org--reports .reports-block-body {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 14px 14px;
+}
+
+.geo-page-org--reports .reports-block-body--kpis {
+    padding: 10px 12px 12px;
+}
+
+.geo-page-org--reports .reports-block-body--table {
+    padding: 10px 12px 10px;
+}
+
+.geo-page-org--reports .reports-block-body--table .reports-table-toolbar {
+    flex-shrink: 0;
+    margin-bottom: 8px;
+}
+
+.geo-page-org--reports .reports-block-body--table .table-container {
+    width: 100%;
+}
+
+.geo-page-org--reports .reports-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 0;
+}
+
+.geo-page-org--reports .reports-kpi-card {
+    position: relative;
+    background: linear-gradient(135deg, #f8fafc 0%, #fff 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 14px 16px 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.geo-page-org--reports .reports-kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
+.geo-page-org--reports .reports-kpi-card--warn {
+    border-color: rgba(239, 68, 68, 0.35);
+    background: linear-gradient(135deg, #fef2f2 0%, #fff 100%);
+}
+
+.geo-page-org--reports .reports-kpi-card--good {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: linear-gradient(135deg, #ecfdf5 0%, #fff 100%);
+}
+
+.geo-page-org--reports .reports-kpi-icon {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: 18px;
+    opacity: 0.7;
+}
+
+.geo-page-org--reports .reports-kpi-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    padding-right: 24px;
+}
+
+.geo-page-org--reports .reports-kpi-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.geo-page-org--reports .reports-kpi-suffix {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.geo-page-org--reports .reports-chart-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.geo-page-org--reports .reports-chart-head h3 {
+    margin: 0;
+}
+
+.geo-page-org--reports .reports-chart-sub {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.geo-page-org--reports .reports-fields-search,
+.geo-page-org--reports .reports-table-search,
+.geo-page-org--reports .reports-table-filter {
+    height: 34px;
+    font-size: 12px;
+}
+
+.geo-page-org--reports .reports-fields-search {
+    margin-top: 8px;
+    width: 100%;
+}
+
+.geo-page-org--reports .reports-charts-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.geo-page-org--reports .reports-chart-card {
+    margin-bottom: 0;
+    padding: 20px;
+}
+
+.geo-page-org--reports .reports-chart-card h3 {
+    font-size: 14px;
+    margin-bottom: 14px;
+}
+
+.geo-page-org--reports .reports-chart-card--wide {
+    grid-column: 1 / -1;
+}
+
+.geo-page-org--reports .reports-bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.geo-page-org--reports .reports-bar-row {
+    display: grid;
+    grid-template-columns: minmax(80px, 28%) 1fr 36px;
+    gap: 10px;
+    align-items: center;
+    font-size: 12px;
+}
+
+.geo-page-org--reports .reports-bar-label {
+    color: var(--text-primary);
+    font-weight: 500;
+    line-height: 1.3;
+    word-break: break-word;
+}
+
+.geo-page-org--reports .reports-bar-track {
+    height: 10px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.geo-page-org--reports .reports-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #34d399);
+    border-radius: 999px;
+    min-width: 4px;
+}
+
+.geo-page-org--reports .reports-bar-value {
+    text-align: right;
+    font-weight: 700;
+    color: #334155;
+}
+
+.geo-page-org--reports .reports-bar-fill {
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Timeline (SVG) */
+.geo-page-org--reports .reports-timeline-chart {
+    min-height: 200px;
+}
+
+.geo-page-org--reports .reports-tl-svg {
+    display: block;
+}
+
+.geo-page-org--reports .reports-tl-grid {
+    stroke: #e2e8f0;
+    stroke-width: 1;
+}
+
+.geo-page-org--reports .reports-tl-axis {
+    fill: #94a3b8;
+    font-size: 10px;
+}
+
+.geo-page-org--reports .reports-tl-dot {
+    fill: #fff;
+    stroke: #3b82f6;
+    stroke-width: 2.5;
+    transition: r 0.15s ease;
+}
+
+.geo-page-org--reports .reports-tl-point:hover .reports-tl-dot {
+    r: 6;
+}
+
+/* Donut */
+.geo-page-org--reports .reports-donut-wrap {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.geo-page-org--reports .reports-donut-chart {
+    flex-shrink: 0;
+}
+
+.geo-page-org--reports .reports-donut-chart circle {
+    transition: stroke-width 0.15s ease;
+    cursor: default;
+}
+
+.geo-page-org--reports .reports-donut-chart circle:hover {
+    stroke-width: 30;
+}
+
+.geo-page-org--reports .reports-donut-total {
+    font-size: 28px;
+    font-weight: 700;
+    fill: var(--text-primary);
+}
+
+.geo-page-org--reports .reports-donut-total-label {
+    font-size: 11px;
+    fill: var(--text-muted);
+}
+
+.geo-page-org--reports .reports-donut-legend {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-width: 140px;
+}
+
+.geo-page-org--reports .reports-donut-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+}
+
+.geo-page-org--reports .reports-donut-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.geo-page-org--reports .reports-donut-legend-label {
+    flex: 1;
+    color: var(--text-primary);
+}
+
+.geo-page-org--reports .reports-donut-legend-val {
+    font-weight: 700;
+    color: #475569;
+}
+
+/* Table toolbars */
+.geo-page-org--reports .reports-table-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.geo-page-org--reports .reports-table-toolbar h3 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.geo-page-org--reports .reports-table-tools {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.geo-page-org--reports .reports-table-search {
+    min-width: 200px;
+}
+
+.geo-page-org--reports .reports-export-btn {
+    height: 34px;
+    font-size: 12px;
+}
+
+/* Sortable headers */
+.geo-page-org--reports .reports-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    position: relative;
+}
+
+.geo-page-org--reports .reports-th-sortable:hover {
+    color: var(--accent-blue);
+}
+
+.geo-page-org--reports .reports-th-sortable::after {
+    content: '⇅';
+    font-size: 10px;
+    opacity: 0.35;
+    margin-left: 4px;
+}
+
+.geo-page-org--reports .reports-th-sortable.is-sorted-asc::after {
+    content: '▲';
+    opacity: 1;
+    color: var(--accent-blue);
+}
+
+.geo-page-org--reports .reports-th-sortable.is-sorted-desc::after {
+    content: '▼';
+    opacity: 1;
+    color: var(--accent-blue);
+}
+
+.geo-page-org--reports .reports-fields-table th,
+.geo-page-org--reports .reports-fields-table td {
+    font-size: 12px;
+}
+
+/* Mini progress in cell */
+.geo-page-org--reports .reports-progress-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.geo-page-org--reports .reports-mini-track {
+    width: 54px;
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.geo-page-org--reports .reports-mini-fill {
+    display: block;
+    height: 100%;
+    background: var(--accent-green);
+    border-radius: 999px;
+}
+
+/* Status pill */
+.geo-page-org--reports .reports-status-pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.geo-page-org--reports .reports-status-pill[data-st="Завершено"] {
+    background: #ecfdf5; color: #047857; border-color: #bbf7d0;
+}
+.geo-page-org--reports .reports-status-pill[data-st="В процессе"],
+.geo-page-org--reports .reports-status-pill[data-st="Начато"] {
+    background: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;
+}
+.geo-page-org--reports .reports-status-pill[data-st="Отменено"] {
+    background: #fef2f2; color: #b91c1c; border-color: #fecaca;
+}
+.geo-page-org--reports .reports-status-pill[data-st="Заморожено"] {
+    background: #f0f9ff; color: #0369a1; border-color: #bae6fd;
+}
+
+.geo-page-org--reports .reports-preset-btn.is-active {
+    background: #334155;
+    color: #fff;
+    border-color: #334155;
+}
+
+/* Режим формирования PDF: фиксированная ширина, полностью раскрытые таблицы */
+.reports-export-holder {
+    z-index: -1;
+    pointer-events: none;
+}
+
+.reports-exporting .reports-layout-hint,
+.reports-exporting .reports-blocks-panel {
+    display: none !important;
+}
+
+.reports-exporting .reports-layout-item.reports-block--hidden {
+    display: none !important;
+}
+
+.reports-exporting .reports-kpi-grid {
+    grid-template-columns: repeat(4, 1fr) !important;
+}
+
+.reports-exporting .table-container {
+    overflow: visible !important;
+}
+
+.reports-exporting .history-table {
+    min-width: 0 !important;
+    width: 100% !important;
+    table-layout: fixed;
+}
+
+.reports-exporting .history-table th,
+.reports-exporting .history-table td {
+    white-space: normal !important;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.reports-exporting .reports-table-tools,
+.reports-exporting .reports-block-drag {
+    display: none !important;
+}
+
+.reports-exporting .reports-donut-wrap {
+    flex-direction: row !important;
+}
+
+/* Шапка отчёта — скрыта на экране, видна в PDF / при захвате */
+.geo-page-org--reports .reports-print-header {
+    display: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 4px 14px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #10b981;
+}
+
+.geo-page-org--reports .reports-print-header.is-visible {
+    display: flex;
+}
+
+.geo-page-org--reports .reports-print-brand {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.geo-page-org--reports .reports-print-logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: #10b981;
+}
+
+.geo-page-org--reports .reports-print-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.geo-page-org--reports .reports-print-meta {
+    text-align: right;
+    font-size: 11px;
+    color: #334155;
+    line-height: 1.6;
+}
+
+.geo-page-org--reports .reports-print-gen {
+    color: #94a3b8;
+    margin-top: 2px;
+}
+
+@media (max-width: 900px) {
+    .geo-page-org--reports .reports-filters-grid,
+    .geo-page-org--reports .reports-charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Мобильная адаптация отчётов */
+@media (max-width: 768px) {
+    body.geo-page-org {
+        padding: 16px 10px;
+    }
+
+    .geo-page-org--reports .card {
+        padding: 18px 14px;
+    }
+
+    .geo-page-org--reports .reports-kpi-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .geo-page-org--reports .reports-kpi-value {
+        font-size: 18px;
+    }
+
+    /* Тулбары таблиц — в столбик, элементы на всю ширину */
+    .geo-page-org--reports .reports-table-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .geo-page-org--reports .reports-table-tools {
+        width: 100%;
+    }
+
+    .geo-page-org--reports .reports-table-tools > * {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .geo-page-org--reports .reports-table-search {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .geo-page-org--reports .reports-blocks-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .geo-page-org--reports .reports-block-body--table .history-table {
+        font-size: 10px;
+    }
+
+    .geo-page-org--reports .history-table {
+        min-width: 520px;
+        font-size: 11px;
+    }
+
+    .geo-page-org--reports .history-table th,
+    .geo-page-org--reports .history-table td {
+        padding: 7px 6px;
+        white-space: nowrap;
+    }
+
+    /* Donut: вертикально, чтобы влезал */
+    .geo-page-org--reports .reports-donut-wrap {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .geo-page-org--reports .reports-donut-legend {
+        width: 100%;
+    }
+
+    /* Период: даты в столбик */
+    .geo-page-org--reports .reports-period-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .geo-page-org--reports .reports-period-sep {
+        display: none;
+    }
+
+    .geo-page-org--reports .reports-filter-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .geo-page-org--reports .reports-filter-actions .btn {
+        width: 100%;
+    }
+}
+
+/* ===== Печать / экспорт в PDF ===== */
+@media print {
+    @page {
+        size: A4;
+        margin: 12mm 10mm;
+    }
+
+    body {
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    /* Прячем всё, кроме страницы отчётов */
+    body.geo-page-org--reports > .card.agronomist-hero,
+    body.geo-page-org--reports > .card.reports-filters-card {
+        display: none !important;
+    }
+
+    .geo-page-org--reports {
+        max-width: 100% !important;
+    }
+
+    #banner {
+        display: none !important;
+    }
+
+    .geo-page-org--reports .reports-table-tools,
+    .geo-page-org--reports .reports-th-sortable::after {
+        display: none !important;
+    }
+
+    .geo-page-org--reports .reports-print-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 12px;
+        margin-bottom: 16px;
+        border-bottom: 2px solid #10b981;
+    }
+
+    .geo-page-org--reports .reports-print-brand {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .geo-page-org--reports .reports-print-logo {
+        font-size: 18px;
+        font-weight: 700;
+        color: #10b981;
+    }
+
+    .geo-page-org--reports .reports-print-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #0f172a;
+    }
+
+    .geo-page-org--reports .reports-print-meta {
+        text-align: right;
+        font-size: 11px;
+        color: #334155;
+        line-height: 1.6;
+    }
+
+    .geo-page-org--reports .reports-print-gen {
+        color: #94a3b8;
+        margin-top: 2px;
+    }
+
+    /* Карточки без теней, аккуратные рамки, не рвём по странице */
+    .geo-page-org--reports .card,
+    .geo-page-org--reports .reports-chart-card,
+    .geo-page-org--reports .reports-kpi-card {
+        box-shadow: none !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .geo-page-org--reports .reports-kpi-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+
+    .geo-page-org--reports .reports-charts-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .geo-page-org--reports .reports-chart-card:hover,
+    .geo-page-org--reports .reports-kpi-card:hover {
+        transform: none !important;
+        box-shadow: none !important;
+    }
+
+    /* Гарантируем печать цветов графиков */
+    .geo-page-org--reports .reports-bar-fill,
+    .geo-page-org--reports .reports-mini-fill,
+    .geo-page-org--reports .reports-donut-dot,
+    .geo-page-org--reports .reports-status-pill,
+    .geo-page-org--reports .reports-kpi-card,
+    .geo-page-org--reports .reports-donut-chart svg,
+    .geo-page-org--reports .reports-tl-svg {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .geo-page-org--reports .table-container {
+        overflow: visible !important;
+    }
+
+    .geo-page-org--reports table {
+        font-size: 10px !important;
     }
 }
 
