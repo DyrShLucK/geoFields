@@ -37,6 +37,35 @@ def _apply_colormap(values_u8, alpha_mask, colormap_name="rdylgn"):
     return rgba
 
 
+# Агрономическая классификация уклонов (4 группы, градусы → RGB).
+SLOPE_CLASS_COLORS = (
+    (26, 150, 65),    # 0–3°  Неэродированные / слабоэродированные
+    (255, 255, 191),  # 3–5°  Средне- и слабоэродированные
+    (253, 174, 97),   # 5–8°  Средне- и сильносмытые почвы
+    (215, 25, 28),    # >8°   Сильноэродированные
+)
+
+
+def _apply_slope_classes(slope_deg, alpha_mask):
+    """Дискретная раскраска уклона по агрономическим классам."""
+    rgba = np.zeros((*slope_deg.shape, 4), dtype=np.uint8)
+    visible = alpha_mask > 0
+
+    class_masks = [
+        visible & (slope_deg >= 0.0) & (slope_deg < 3.0),
+        visible & (slope_deg >= 3.0) & (slope_deg < 5.0),
+        visible & (slope_deg >= 5.0) & (slope_deg < 8.0),
+        visible & (slope_deg >= 8.0),
+    ]
+    for mask, rgb in zip(class_masks, SLOPE_CLASS_COLORS):
+        rgba[mask, 0] = rgb[0]
+        rgba[mask, 1] = rgb[1]
+        rgba[mask, 2] = rgb[2]
+        rgba[mask, 3] = 255
+
+    return rgba
+
+
 _elevation_range_cache = {}
 
 
@@ -114,27 +143,24 @@ def render_tile(
 
             alpha_mask = np.where(valid, 255, 0).astype(np.uint8)
 
-            values = np.where(valid, values, np.nan)
-            if layer_type == "elevation":
-                v_min = float(vmin) if vmin is not None else 0.0
-                v_max = float(vmax) if vmax is not None else 1.0
-                if v_max <= v_min:
-                    v_max = v_min + 1.0
-                colormap_name = "terrain"
-            elif layer_type == "slope":
-                v_min = float(vmin) if vmin is not None else 0.0
-                v_max = float(vmax) if vmax is not None else 15.0
-                if v_max <= v_min:
-                    v_max = v_min + 1.0
-                colormap_name = "ylorrd"
+            if layer_type == "slope":
+                slope_arr = np.where(valid, values, 0.0)
+                rgba = _apply_slope_classes(slope_arr, alpha_mask)
             else:
-                v_min, v_max = 0.0, 0.8
-                colormap_name = "rdylgn"
+                values = np.where(valid, values, np.nan)
+                if layer_type == "elevation":
+                    v_min = float(vmin) if vmin is not None else 0.0
+                    v_max = float(vmax) if vmax is not None else 1.0
+                    if v_max <= v_min:
+                        v_max = v_min + 1.0
+                    colormap_name = "terrain"
+                else:
+                    v_min, v_max = 0.0, 0.8
+                    colormap_name = "rdylgn"
 
-            normalized = np.clip((values - v_min) / (v_max - v_min) * 255.0, 0, 255)
-            normalized = np.nan_to_num(normalized, nan=0).astype(np.uint8)
-
-            rgba = _apply_colormap(normalized, alpha_mask, colormap_name)
+                normalized = np.clip((values - v_min) / (v_max - v_min) * 255.0, 0, 255)
+                normalized = np.nan_to_num(normalized, nan=0).astype(np.uint8)
+                rgba = _apply_colormap(normalized, alpha_mask, colormap_name)
 
             img = Image.fromarray(rgba, mode="RGBA")
             buf = io.BytesIO()

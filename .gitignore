@@ -3,3 +3,5 @@
 /shared-data
 /docs/*
 /docx/*
+.DS_Store
+.idea/
