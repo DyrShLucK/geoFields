@@ -1,8 +1,17 @@
-FROM python:3.11-slim
+# bookworm — стабильные пакеты GDAL/GEOS (slim без тега может перейти на trixie и ломать apt)
+FROM python:3.11-slim-bookworm
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgeos-dev libproj-dev gdal-bin libgdal-dev curl && \
-    rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        libgeos-dev \
+        libproj-dev \
+        gdal-bin \
+        libgdal-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -11,5 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Запускаем FastAPI вместо main.py
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "6767"]
