@@ -140,14 +140,14 @@
         const completionPct = overview.operationsTotal > 0
             ? Math.round((overview.operationsCompleted / overview.operationsTotal) * 100) : 0;
         return [
-            { id: 'fieldsInScope', label: 'Полей в отчёте', value: overview.fieldsInScope, icon: '🌾' },
-            { id: 'totalAreaHa', label: 'Суммарная площадь', value: formatNum(overview.totalAreaHa, 1), suffix: ' га', icon: '📐' },
-            { id: 'operationsTotal', label: 'Операций за период', value: overview.operationsTotal, icon: '🚜' },
-            { id: 'operationsCompleted', label: 'Завершено', value: overview.operationsCompleted, suffix: ` (${completionPct}%)`, icon: '✅', good: true },
-            { id: 'operationsInProgress', label: 'В работе', value: overview.operationsInProgress, icon: '⏳' },
-            { id: 'operationsPlanned', label: 'Запланировано', value: overview.operationsPlanned, icon: '📅' },
-            { id: 'overduePlanned', label: 'Просрочено (план)', value: overview.overduePlanned, icon: '⚠️', warn: overview.overduePlanned > 0 },
-            { id: 'avgActualYield', label: 'Средняя урожайность', value: overview.avgActualYield != null ? formatNum(overview.avgActualYield, 2) : '—', suffix: overview.avgActualYield != null ? ' ц/га' : '', icon: '📊' }
+            { id: 'fieldsInScope', label: 'Полей в отчёте', value: overview.fieldsInScope, icon: 'wheat.png' },
+            { id: 'totalAreaHa', label: 'Суммарная площадь', value: formatNum(overview.totalAreaHa, 1), suffix: ' га', icon: 'landscape.png' },
+            { id: 'operationsTotal', label: 'Операций за период', value: overview.operationsTotal, icon: 'windmill.svg' },
+            { id: 'operationsCompleted', label: 'Завершено', value: overview.operationsCompleted, suffix: ` (${completionPct}%)`, icon: 'done.png', good: true },
+            { id: 'operationsInProgress', label: 'В работе', value: overview.operationsInProgress, icon: 'settings.svg' },
+            { id: 'operationsPlanned', label: 'Запланировано', value: overview.operationsPlanned, icon: 'calendar.svg' },
+            { id: 'overduePlanned', label: 'Просрочено (план)', value: overview.overduePlanned, icon: 'turtle.png', warn: overview.overduePlanned > 0 },
+            { id: 'avgActualYield', label: 'Средняя урожайность', value: overview.avgActualYield != null ? formatNum(overview.avgActualYield, 2) : '—', suffix: overview.avgActualYield != null ? ' ц/га' : '', icon: 'analytics.svg' }
         ];
     }
 
@@ -164,7 +164,7 @@
         }
         grid.innerHTML = cards.map(c => `
             <div class="reports-kpi-card${c.warn ? ' reports-kpi-card--warn' : ''}${c.good ? ' reports-kpi-card--good' : ''}" data-kpi-id="${c.id}">
-                <span class="reports-kpi-icon">${c.icon}</span>
+                <span class="reports-kpi-icon"><img src="/images/${c.icon}" alt="" /></span>
                 <span class="reports-kpi-label">${escapeHtml(c.label)}</span>
                 <strong class="reports-kpi-value">${escapeHtml(String(c.value))}<span class="reports-kpi-suffix">${escapeHtml(c.suffix || '')}</span></strong>
             </div>
@@ -553,7 +553,7 @@
         if (dash) dash.classList.toggle('is-layout-edit', layoutEditMode);
         if (hint) hint.hidden = !layoutEditMode;
         if (panel) panel.hidden = !layoutEditMode;
-        if (editBtn) editBtn.textContent = layoutEditMode ? '⚙ Редактирование…' : '⚙ Настроить блоки';
+        if (editBtn) editBtn.textContent = layoutEditMode ? 'Редактирование…' : 'Настроить блоки';
         if (layoutSortable) layoutSortable.option('disabled', !layoutEditMode);
         renderBlocksPanel();
     }

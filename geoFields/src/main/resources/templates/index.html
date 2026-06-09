@@ -16,9 +16,15 @@
     <!-- Верхняя панель (Header) -->
     <header class="topbar">
         <div class="topbar-left">
-            <button class="icon-btn" id="sidebar-toggle" title="Меню навигации">☰</button>
+            <button class="icon-btn" id="sidebar-toggle" title="Меню навигации" aria-label="Меню навигации">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
             <div class="brand">
-                <div class="brand-logo">🌿</div>
+                <div class="brand-logo"><img th:src="@{/images/logo.svg}" src="/images/logo.svg" alt="Логотип Агроситуация" /></div>
                 <div>
                     <div class="brand-title">Агроситуация</div>
                     <div class="brand-subtitle">Система агромониторинга</div>
@@ -31,21 +37,26 @@
                 <span class="status-dot"></span>
                 Данные синхронизированы
             </span>
-            
+
+            <span class="topbar-divider" aria-hidden="true"></span>
+
             <!-- Выпадающее меню профиля -->
             <div class="profile-container">
                 <div class="profile-card">
-                    <div class="profile-avatar" id="user-avatar-char">U</div>
-                    <div>
-                        <div class="profile-name" id="user-display-name">Загрузка...</div>
-                        <div class="profile-role" id="user-display-role">Роль в системе</div>
+                    <div class="profile-avatar" id="user-avatar-char">ИИ</div>
+                    <div class="profile-meta">
+                        <div class="profile-name" id="user-display-name">Иванов Иван</div>
+                        <div class="profile-role" id="user-display-role">Агроном</div>
                     </div>
+                    <svg class="profile-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
                 </div>
                 <div class="profile-dropdown">
                     <form th:action="@{/logout}" method="post" class="m-0-full">
                         <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                         <button type="submit" class="dropdown-item">
-                            <span class="dropdown-icon">🚪</span> Выйти из аккаунта
+                            <span class="dropdown-icon"><img th:src="@{/images/exit.svg}" src="/images/exit.svg" alt="" /></span> Выйти из аккаунта
                         </button>
                     </form>
                 </div>
@@ -64,7 +75,7 @@
                 <form th:action="@{/logout}" method="post" class="w-100-pct">
                     <input type="hidden" th:if="${_csrf != null}" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
                     <button type="submit" class="sidebar-item logout-btn">
-                        <span class="sidebar-icon">🚪</span> Выйти из системы
+                        <span class="sidebar-icon"><img th:src="@{/images/exit.svg}" src="/images/exit.svg" alt="" /></span> Выйти из системы
                     </button>
                 </form>
             </div>
@@ -76,15 +87,15 @@
 
     <!-- Кнопки управления (Слева) -->
     <div class="map-controls-left">
-        <button class="floating-btn" id="btn-fit-bounds" title="Показать все поля">🔎</button>
-        <button class="floating-btn" id="btn-measure" title="Инструмент измерения (Линейка)">📏</button>
-        <button class="floating-btn" id="filter-toggle" title="Фильтрация полей">🛠️</button>
+        <button class="floating-btn" id="btn-fit-bounds" title="Показать все поля"><img class="btn-icon" th:src="@{/images/loop.svg}" src="/images/loop.svg" alt="Показать все поля" /></button>
+        <button class="floating-btn" id="btn-measure" title="Инструмент измерения (Линейка)"><img class="btn-icon" th:src="@{/images/target.svg}" src="/images/target.svg" alt="Линейка" /></button>
+        <button class="floating-btn" id="filter-toggle" title="Фильтрация полей"><img class="btn-icon" th:src="@{/images/filter.svg}" src="/images/filter.svg" alt="Фильтр" /></button>
     </div>
 
     <!-- Кнопки управления (Справа) -->
     <div class="map-controls-right">
-        <button class="floating-btn" id="layers-toggle" title="Слои карты">🥞</button>
-        <button class="floating-btn" id="analytics-toggle" title="Панель аналитики">📊</button>
+        <button class="floating-btn" id="layers-toggle" title="Слои карты"><img class="btn-icon" th:src="@{/images/layers.svg}" src="/images/layers.svg" alt="Слои" /></button>
+        <button class="floating-btn" id="analytics-toggle" title="Панель аналитики"><img class="btn-icon" th:src="@{/images/analytics.svg}" src="/images/analytics.svg" alt="Аналитика" /></button>
     </div>
 
     <!-- Индикатор активного режима линейки -->
@@ -221,7 +232,7 @@
                 в базу потом.
             </p>
             <div class="import-dropzone" id="dropzone">
-                <span class="dropzone-icon">📂</span>
+                <span class="dropzone-icon"><img th:src="@{/images/import.svg}" src="/images/import.svg" alt="" /></span>
                 Перетащите ZIP сюда или <span style="color: #10b981; font-weight: 600; cursor: pointer;">выберите на компьютере</span>
                 <input type="file" id="file-input" class="hide-file-input" accept=".zip,application/zip" />
             </div>
@@ -258,11 +269,8 @@
                     <div class="stat-label">Общая площадь земель</div>
                     <div class="stat-value">315<span class="stat-unit">га</span></div>
                 </div>
-                <div class="stat-right icon-blue">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                        <polyline points="12 5 19 12 12 19"></polyline>
-                    </svg>
+                <div class="stat-right icon-neutral">
+                    <img th:src="@{/images/landscape.png}" src="/images/landscape.png" alt="" />
                 </div>
             </div>
             <div class="stat-card">
@@ -270,11 +278,8 @@
                     <div class="stat-label">Всего полей</div>
                     <div class="stat-value">6</div>
                 </div>
-                <div class="stat-right icon-green">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                        <polyline points="17 6 23 6 23 12"></polyline>
-                    </svg>
+                <div class="stat-right icon-neutral">
+                    <img th:src="@{/images/list.png}" src="/images/list.png" alt="" />
                 </div>
             </div>
             <div class="stat-card">
@@ -282,14 +287,8 @@
                     <div class="stat-label">Средний NDVI</div>
                     <div class="stat-value" id="calc-avg-ndvi">0.74</div>
                 </div>
-                <div class="stat-right icon-sun">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <line x1="12" y1="1" x2="12" y2="3"></line>
-                        <line x1="12" y1="21" x2="12" y2="23"></line>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    </svg>
+                <div class="stat-right icon-neutral">
+                    <img th:src="@{/images/leaf.svg}" src="/images/leaf.svg" alt="" />
                 </div>
             </div>
         </div>
@@ -364,51 +363,11 @@
                         <p class="muted font-sm m-0">Загрузка полей...</p>
                     </div>
                 </div>
-                                <div class="donut-wrap">
+                <div class="donut-wrap">
                     <div class="donut-chart" data-tip=""></div>
                 </div>
                 <div class="crop-legend" id="crop-legend">
                     <p class="muted font-sm m-0">Загрузка...</p>
-                </div>
-
-<!-- Показатели здоровья почвы с мультиселектом полей -->
-            <div class="analytics-card">
-                <div class="card-title-mini">Показатели здоровья почвы</div>
-                <div class="filter-group">
-                    <div class="filter-label">Выберите поля для почвенного анализа</div>
-                    <div class="analytics-checkbox-list" id="soil-fields-checklist">
-                        <p class="muted font-sm m-0">Загрузка полей...</p>
-                    </div>
-                </div>
-                
-                <div class="soil-metric">
-                    <div class="soil-top">
-                        <span class="soil-name">Влажность почвы</span>
-                        <span class="soil-val">58%</span>
-                    </div>
-                    <div class="progress">
-                        <div class="progress-fill soil-moisture-bar" data-tip="Влажность: 58% (Оптимально)"></div>
-                    </div>
-                </div>
-
-                <div class="soil-metric">
-                    <div class="soil-top">
-                        <span class="soil-name">Органическое вещество</span>
-                        <span class="soil-val">72%</span>
-                    </div>
-                    <div class="progress">
-                        <div class="progress-fill soil-organic-bar" data-tip="Органическое вещество: 72% (Чернозем)"></div>
-                    </div>
-                </div>
-
-                <div class="soil-metric">
-                    <div class="soil-top">
-                        <span class="soil-name">Баланс pH</span>
-                        <span class="soil-val">85%</span>
-                    </div>
-                    <div class="progress">
-                        <div class="progress-fill soil-ph-bar" data-tip="Кислотность pH: 6.8 (Слабокислая, 85% здоровья)"></div>
-                    </div>
                 </div>
             </div>
         </div>
@@ -426,11 +385,8 @@
                         <div class="stat-label">УФ-индекс в регионе</div>
                         <div class="stat-value">6<span class="stat-unit">Высокий</span></div>
                     </div>
-                    <div class="stat-right icon-orange" data-tip="Текущий УФ-индекс в Саратове: 6 (Высокий уровень облучения). Рекомендуется применение СЗР во избежание ожогов листьев.">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
-                            <circle cx="12" cy="12" r="4"></circle>
-                        </svg>
+                    <div class="stat-right icon-neutral" data-tip="Текущий УФ-индекс в Саратове: 6 (Высокий уровень облучения). Рекомендуется применение СЗР во избежание ожогов листьев.">
+                        <img th:src="@{/images/solarenergy.png}" src="/images/solarenergy.png" alt="" />
                     </div>
                 </div>
                 <div class="stat-card">
@@ -438,10 +394,8 @@
                         <div class="stat-label">Влажность воздуха</div>
                         <div class="stat-value">48<span class="stat-unit">%</span></div>
                     </div>
-                    <div class="stat-right icon-blue" data-tip="Влажность воздуха в Саратове: 48%">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
+                    <div class="stat-right icon-neutral" data-tip="Влажность воздуха в Саратове: 48%">
+                        <img th:src="@{/images/wet.png}" src="/images/wet.png" alt="" />
                     </div>
                 </div>
                 <div class="stat-card">
@@ -449,11 +403,8 @@
                         <div class="stat-label">Осадки сегодня</div>
                         <div class="stat-value">0.0<span class="stat-unit">мм</span></div>
                     </div>
-                    <div class="stat-right icon-blue" data-tip="Осадки сегодня в Саратове отсутствуют">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="12" y1="5" x2="12" y2="19"></line>
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
+                    <div class="stat-right icon-neutral" data-tip="Осадки сегодня в Саратове отсутствуют">
+                        <img th:src="@{/images/rain.png}" src="/images/rain.png" alt="" />
                     </div>
                 </div>
             </div>

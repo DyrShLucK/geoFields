@@ -93,26 +93,26 @@ const FIELD_HISTORY_PANEL_MAX_HEIGHT_RATIO = 0.65;
 // Шаблоны ролевой модели
 const MENU_TEMPLATES = {
     "USER": [
-        { label: "Карта полей", path: "/", icon: "🗺️", active: true },
-        { label: "Отчёты", path: "/org/reports", icon: "📊" }
+        { label: "Карта полей", path: "/", icon: "earth.svg", active: true },
+        { label: "Отчёты", path: "/org/reports", icon: "analytics.svg" }
     ],
     "AGRONOMIST": [
-        { label: "Карта полей", path: "/", icon: "🗺️", active: true },
-        { label: "История посевов", path: "/org/agronomist", icon: "🌾" },
-        { label: "Операции по полям", path: "/org/field-work", icon: "🚜" },
-        { label: "Отчёты", path: "/org/reports", icon: "📊" }
+        { label: "Карта полей", path: "/", icon: "earth.svg", active: true },
+        { label: "История посевов", path: "/org/agronomist", icon: "carrot.svg" },
+        { label: "Операции по полям", path: "/org/field-work", icon: "windmill.svg" },
+        { label: "Отчёты", path: "/org/reports", icon: "analytics.svg" }
     ],
     "ORG_MANAGER": [
-        { label: "Карта полей", path: "/", icon: "🗺️", active: true },
-        { label: "Заявки и инвайты", path: "/org/manager", icon: "📋" }
+        { label: "Карта полей", path: "/", icon: "earth.svg", active: true },
+        { label: "Заявки и инвайты", path: "/org/manager", icon: "addplus.svg" }
     ],
     "ORG_ADMIN": [
-        { label: "Карта полей", path: "/", icon: "🗺️", active: true },
-        { label: "История посевов", path: "/org/agronomist", icon: "🌾" },
-        { label: "Операции по полям", path: "/org/field-work", icon: "🚜" },
-        { label: "Отчёты", path: "/org/reports", icon: "📊" },
-        { label: "Заявки и инвайты", path: "/org/manager", icon: "📋" },
-        { label: "Управление организацией", path: "/org/admin", icon: "⚙️" }
+        { label: "Карта полей", path: "/", icon: "earth.svg", active: true },
+        { label: "История посевов", path: "/org/agronomist", icon: "carrot.svg" },
+        { label: "Операции по полям", path: "/org/field-work", icon: "windmill.svg" },
+        { label: "Отчёты", path: "/org/reports", icon: "analytics.svg" },
+        { label: "Заявки и инвайты", path: "/org/manager", icon: "addplus.svg" },
+        { label: "Управление организацией", path: "/org/admin", icon: "settings.svg" }
     ]
 };
 
@@ -139,6 +139,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try { ensureFieldContextMenu(); } catch (e) { console.error("Сбой FieldContextMenu:", e); }
     try { setupSlopeAnalyticsCard(); } catch (e) { console.error("Сбой SlopeAnalytics:", e); }
     try { setupAnalyticsCardCollapsing(); } catch (e) { console.error("Сбой AnalyticsCollapsing:", e); }
+    try { setupCollapsibleFieldLists(); } catch (e) { console.error("Сбой CollapsibleFieldLists:", e); }
     try { setupNdviCalculation(); } catch (e) { console.error("Сбой NdviCalculation:", e); }
     try { setupTerrainMapLayers(); } catch (e) { console.error("Сбой TerrainMapLayers:", e); }
     try { initChartTooltips(); } catch (e) { console.error("Сбой ChartTooltips:", e); }
@@ -210,9 +211,9 @@ function fallbackProfileUI() {
     const charEl = document.getElementById("user-avatar-char");
     const roleEl = document.getElementById("user-display-role");
 
-    if (nameEl) nameEl.textContent = "Гость";
-    if (charEl) charEl.textContent = "Г";
-    if (roleEl) roleEl.textContent = "Демонстрационный доступ";
+    if (nameEl) nameEl.textContent = "Иванов Иван";
+    if (charEl) charEl.textContent = "ИИ";
+    if (roleEl) roleEl.textContent = "Агроном";
 
     buildMenuForRole("USER");
     updateSyncStatus(false);
@@ -226,7 +227,7 @@ async function checkSessionAndBuildMenu() {
     if (!response.ok) throw new Error();
 
     const data = await response.json();
-    const fullName = data.currentUserFullName || data.currentLogin || "Пользователь";
+    const fullName = data.currentUserFullName || data.currentLogin || "Иванов Иван";
     
     let rawRole = data.currentUserRole || data.role || "USER";
     if (typeof rawRole === 'string' && rawRole.startsWith("ROLE_")) {
@@ -271,13 +272,13 @@ function buildMenuForRole(role) {
     const items = MENU_TEMPLATES[role] || MENU_TEMPLATES["USER"];
     const canFieldOps = role === "AGRONOMIST" || role === "ORG_ADMIN";
     
-    let html = '<div class="sidebar-heading">Модули systems</div>';
+    let html = '<div class="sidebar-heading">Модули системы</div>';
     const currentPath = window.location.pathname || '/';
     items.forEach(item => {
         const activeClass = isSidebarItemActive(item, currentPath) ? "active" : "";
         html += `
             <a href="${item.path}" class="sidebar-item ${activeClass}">
-                <span class="sidebar-icon">${item.icon}</span> ${item.label}
+                <span class="sidebar-icon"><img src="/images/${item.icon}" alt="" /></span> ${item.label}
             </a>
         `;
     });
@@ -286,10 +287,10 @@ function buildMenuForRole(role) {
         html += `
         <div class="sidebar-heading" style="margin-top:20px;">Операции</div>
         <button type="button" class="sidebar-item sidebar-item-btn" id="btn-add-field-trigger">
-            <span class="sidebar-icon">➕</span> Добавить поле вручную
+            <span class="sidebar-icon"><img src="/images/addplus.svg" alt="" /></span> Добавить поле вручную
         </button>
         <button type="button" class="sidebar-item sidebar-item-btn" id="btn-import-trigger">
-            <span class="sidebar-icon">🤖</span> ИИ-импорт полей (SHP)
+            <span class="sidebar-icon"><img src="/images/import.svg" alt="" /></span> ИИ-импорт полей (SHP)
         </button>
         `;
     }
@@ -324,7 +325,7 @@ function updateSyncStatus(isOnline) {
 document.getElementById("connection-status")?.addEventListener("click", async () => {
     const statusEl = document.getElementById("connection-status");
     if (statusEl?.classList.contains("err")) {
-        statusEl.textContent = "⌛ Синхронизация...";
+        statusEl.innerHTML = `<span class="status-dot"></span> Синхронизация...`;
         try {
             await loadFields();
             await checkSessionAndBuildMenu();
@@ -1190,9 +1191,9 @@ function onFieldLayerClick(e) {
         latestRecordHtml = `
             <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e2e8f0; font-size: 11px; line-height: 1.4;">
                 <strong style="display:block; color: #0f172a; margin-bottom: 2px;">Последний сев (${year} г.):</strong>
-                <span style="display:block; color: #475569;">🌾 Культура: <strong style="color: #0f172a;">${crop}</strong></span>
-                <span style="display:block; color: #475569;">📅 Дата посева: ${sowing}</span>
-                <span style="display:block; color: #475569;">🚜 Урожайность: ${yieldVal}</span>
+                <span style="display:block; color: #475569;">Культура: <strong style="color: #0f172a;">${crop}</strong></span>
+                <span style="display:block; color: #475569;">Дата посева: ${sowing}</span>
+                <span style="display:block; color: #475569;">Урожайность: ${yieldVal}</span>
             </div>
         `;
     } else {
@@ -1207,7 +1208,7 @@ function onFieldLayerClick(e) {
     const popupRoot = document.createElement("div");
     popupRoot.style.cssText = "font-family:'Inter', sans-serif; padding:4px; min-width:180px;";
     popupRoot.innerHTML = `
-        <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">🌿 ${escapeHtml(name)}</strong>
+        <strong style="display:block; margin-bottom:4px; color:#10b981; font-size:13px;">${escapeHtml(name)}</strong>
         <span style="font-size:12px; color:#64748b; font-weight:500;">Площадь: ${area} га</span>
         ${latestRecordHtml}
     `;
@@ -1216,15 +1217,15 @@ function onFieldLayerClick(e) {
     actionsWrap.className = "field-popup-actions";
     popupRoot.appendChild(actionsWrap);
 
-    appendFieldPopupAction(actionsWrap, "🌿 Показать NDVI", "field-popup-ndvi-btn", async (btn) => {
+    appendFieldPopupAction(actionsWrap, "leaf.svg", "Показать NDVI", "field-popup-ndvi-btn", async (btn) => {
         setNdviFieldSelected(fieldId, true);
         await showFieldNdvi(fieldId, btn);
     });
-    appendFieldPopupAction(actionsWrap, "🏔️ Показать рельеф (SRTM)", "field-popup-elevation-btn", async (btn) => {
+    appendFieldPopupAction(actionsWrap, "relief.png", "Показать рельеф (SRTM)", "field-popup-elevation-btn", async (btn) => {
         setTerrainFieldSelected(fieldId, true);
         await showFieldElevation(fieldId, btn, { keepVisible: true });
     });
-    appendFieldPopupAction(actionsWrap, "📐 Показать уклон", "field-popup-slope-btn", async (btn) => {
+    appendFieldPopupAction(actionsWrap, "landscape1.png", "Показать уклон", "field-popup-slope-btn", async (btn) => {
         setTerrainFieldSelected(fieldId, true);
         await showFieldSlope(fieldId, btn, { keepVisible: true });
     });
@@ -1246,17 +1247,41 @@ function onFieldLayerClick(e) {
     activeFieldPopupFieldId = fieldId;
 }
 
-function appendFieldPopupAction(container, label, className, handler) {
+function appendFieldPopupAction(container, iconFile, label, className, handler) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `field-popup-action-btn ${className}`;
-    btn.textContent = label;
+
+    const icon = document.createElement("img");
+    icon.className = "field-popup-action-icon";
+    icon.src = `/images/${iconFile}`;
+    icon.alt = "";
+    const text = document.createElement("span");
+    text.className = "field-popup-action-label";
+    text.textContent = label;
+    btn.appendChild(icon);
+    btn.appendChild(text);
+
     btn.addEventListener("click", (ev) => {
         ev.preventDefault();
         ev.stopPropagation();
         handler(btn).catch(err => console.error("field popup action:", err));
     });
     container.appendChild(btn);
+}
+
+// Меняем только текстовую подпись кнопки попапа, сохраняя иконку.
+function setPopupActionLabel(btn, text) {
+    if (!btn) return;
+    const span = btn.querySelector(".field-popup-action-label");
+    if (span) span.textContent = text;
+    else btn.textContent = text;
+}
+
+function getPopupActionLabel(btn) {
+    if (!btn) return "";
+    const span = btn.querySelector(".field-popup-action-label");
+    return span ? span.textContent : btn.textContent;
 }
 
 function onMapClickClearFieldSelection(e) {
@@ -1451,7 +1476,7 @@ async function loadFields() {
             paint: {
                 "fill-color": [
                     "case",
-                    ["boolean", ["feature-state", "highlight"], false], "#22c55e",
+                    ["boolean", ["feature-state", "highlight"], false], "#34d399",
                     ["boolean", ["feature-state", "ndviSelected"], false], "#3b82f6",
                     "#10b981"
                 ],
@@ -1471,7 +1496,7 @@ async function loadFields() {
             paint: {
                 "line-color": [
                     "case",
-                    ["boolean", ["feature-state", "highlight"], false], "#16a34a",
+                    ["boolean", ["feature-state", "highlight"], false], "#059669",
                     ["boolean", ["feature-state", "ndviSelected"], false], "#1d4ed8",
                     "#10b981"
                 ],
@@ -1520,6 +1545,8 @@ function populateFilterFieldsList(geojson) {
         `;
         listEl.appendChild(label);
     });
+    setupCollapsibleFieldLists();
+    refreshFieldListCounts();
 }
 
 function populateNdviFieldsChecklist(geojson) {
@@ -1578,6 +1605,8 @@ function populateNdviFieldsChecklist(geojson) {
     initCropRecalculation();
     initSoilRecalculation();
     updateCropDistributionChart();
+    setupCollapsibleFieldLists();
+    refreshFieldListCounts();
 }
 
 const CROP_CHART_COLORS = [
@@ -2156,14 +2185,14 @@ function ensureWeatherTabFallbackContent() {
                     <div class="stat-label">Температура</div>
                     <div class="stat-value">+22<span class="stat-unit">°C</span></div>
                 </div>
-                <div class="stat-right icon-orange">☀️</div>
+                <div class="stat-right icon-neutral"><img src="/images/solarenergy.png" alt="" /></div>
             </div>
             <div class="stat-card">
                 <div class="stat-left">
                     <div class="stat-label">Влажность</div>
                     <div class="stat-value">48<span class="stat-unit">%</span></div>
                 </div>
-                <div class="stat-right icon-blue">💧</div>
+                <div class="stat-right icon-neutral"><img src="/images/wet.png" alt="" /></div>
             </div>
         </div>
         <div class="analytics-card">
@@ -2319,8 +2348,8 @@ function setupSlopeAnalyticsCard() {
             <div class="analytics-checkbox-list" id="terrain-fields-checklist"></div>
         </div>
         <div class="filter-group">
-            <button type="button" class="filter-btn primary w-100-pct" id="btn-show-elevation-map">🏔️ Показать рельеф на карте</button>
-            <button type="button" class="filter-btn w-100-pct mt-1" id="btn-show-slope-map">📐 Показать уклон на карте</button>
+            <button type="button" class="filter-btn primary w-100-pct" id="btn-show-elevation-map">Показать рельеф на карте</button>
+            <button type="button" class="filter-btn w-100-pct mt-1" id="btn-show-slope-map">Показать уклон на карте</button>
         </div>
         <p class="muted font-sm m-0" id="slope-status-text">Выберите поля и нажмите кнопку</p>
     `;
@@ -2446,6 +2475,70 @@ function setupAnalyticsCardCollapsing() {
     });
 }
 
+// =====================================================
+// СВОРАЧИВАНИЕ СПИСКОВ ПОЛЕЙ (UX): прячем длинные перечни полей
+// =====================================================
+const COLLAPSIBLE_FIELD_LISTS = [
+    "ndvi-fields-checklist",
+    "crop-fields-checklist",
+    "terrain-fields-checklist",
+    "filter-fields-list"
+];
+
+function setupCollapsibleFieldLists() {
+    COLLAPSIBLE_FIELD_LISTS.forEach(id => bindCollapsibleFieldList(document.getElementById(id)));
+}
+
+function bindCollapsibleFieldList(list) {
+    if (!list) return;
+    const group = list.closest(".filter-group");
+    if (!group) return;
+    const label = group.querySelector(".filter-label");
+    if (!label || label.dataset.collapseBound === "1") return;
+    label.dataset.collapseBound = "1";
+
+    const text = (label.textContent || "Поля").trim();
+    label.classList.add("field-list-label");
+    label.innerHTML = `
+        <span class="field-list-toggle">
+            <span class="field-list-chevron">▾</span>
+            <span>${text}</span>
+        </span>
+        <span class="field-list-count"></span>
+    `;
+    label.setAttribute("role", "button");
+    label.setAttribute("tabindex", "0");
+    label.addEventListener("click", () => {
+        const collapsed = group.classList.toggle("field-collapsed");
+        label.classList.toggle("is-collapsed", collapsed);
+    });
+    label.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            label.click();
+        }
+    });
+
+    list.addEventListener("change", () => updateFieldListCount(list));
+    updateFieldListCount(list);
+}
+
+function updateFieldListCount(list) {
+    const group = list.closest(".filter-group");
+    const countEl = group?.querySelector(".field-list-count");
+    if (!countEl) return;
+    const total = list.querySelectorAll('input[type="checkbox"]').length;
+    const checked = list.querySelectorAll('input[type="checkbox"]:checked').length;
+    countEl.textContent = total ? `${checked}/${total}` : "";
+}
+
+function refreshFieldListCounts() {
+    COLLAPSIBLE_FIELD_LISTS.forEach(id => {
+        const list = document.getElementById(id);
+        if (list) updateFieldListCount(list);
+    });
+}
+
 // Функция добавления слоя на карту
 // =====================================================
 // NDVI: ДОБАВЛЕНИЕ РАСТРОВОГО СЛОЯ НА КАРТУ
@@ -2545,16 +2638,16 @@ async function runTerrainButtonAction(buttonElement, originalLabel, action, opti
     const keepVisible = options.keepVisible === true;
     if (buttonElement) {
         buttonElement.disabled = true;
-        buttonElement.textContent = "⏳ Подготовка данных...";
+        setPopupActionLabel(buttonElement, "Подготовка данных...");
     }
     try {
         await action();
         if (buttonElement) {
-            buttonElement.textContent = keepVisible ? "✅ На карте" : "✅ Готово";
+            setPopupActionLabel(buttonElement, keepVisible ? "На карте" : "Готово");
             buttonElement.disabled = false;
             if (keepVisible) {
                 window.setTimeout(() => {
-                    if (buttonElement.isConnected) buttonElement.textContent = originalLabel;
+                    if (buttonElement.isConnected) setPopupActionLabel(buttonElement, originalLabel);
                 }, 2000);
             } else {
                 window.setTimeout(() => {
@@ -2565,7 +2658,7 @@ async function runTerrainButtonAction(buttonElement, originalLabel, action, opti
     } catch (error) {
         if (buttonElement) {
             buttonElement.disabled = false;
-            buttonElement.textContent = originalLabel;
+            setPopupActionLabel(buttonElement, originalLabel);
         }
         throw error;
     }
@@ -2587,10 +2680,10 @@ async function showFieldNdvi(fieldId, buttonElement) {
         return;
     }
 
-    const originalLabel = buttonElement?.textContent || "🌿 Показать NDVI";
+    const originalLabel = getPopupActionLabel(buttonElement) || "Показать NDVI";
     if (buttonElement) {
         buttonElement.disabled = true;
-        buttonElement.textContent = "⏳ Загрузка NDVI...";
+        setPopupActionLabel(buttonElement, "Загрузка NDVI...");
     }
 
     try {
@@ -2624,16 +2717,16 @@ async function showFieldNdvi(fieldId, buttonElement) {
         }
 
         if (buttonElement) {
-            buttonElement.textContent = "✅ На карте";
+            setPopupActionLabel(buttonElement, "На карте");
             buttonElement.disabled = false;
             window.setTimeout(() => {
-                if (buttonElement.isConnected) buttonElement.textContent = originalLabel;
+                if (buttonElement.isConnected) setPopupActionLabel(buttonElement, originalLabel);
             }, 2000);
         }
     } catch (error) {
         if (buttonElement) {
             buttonElement.disabled = false;
-            buttonElement.textContent = originalLabel;
+            setPopupActionLabel(buttonElement, originalLabel);
         }
         console.error("showFieldNdvi:", error);
         alert(`Не удалось загрузить NDVI: ${error.message}`);
@@ -2652,7 +2745,7 @@ async function showFieldElevation(fieldId, buttonElement, options = {}) {
     const idStr = String(fieldId);
     const sourceId = `elevation-source-${idStr}`;
     const layerId = `elevation-layer-${idStr}`;
-    const originalLabel = buttonElement?.textContent || "🏔️ Показать рельеф (SRTM)";
+    const originalLabel = getPopupActionLabel(buttonElement) || "Показать рельеф (SRTM)";
 
     try {
         await runTerrainButtonAction(buttonElement, originalLabel, async () => {
@@ -2691,7 +2784,7 @@ async function showFieldSlope(fieldId, buttonElement, options = {}) {
     const idStr = String(fieldId);
     const sourceId = `slope-source-${idStr}`;
     const layerId = `slope-layer-${idStr}`;
-    const originalLabel = buttonElement?.textContent || "📐 Показать уклон";
+    const originalLabel = getPopupActionLabel(buttonElement) || "Показать уклон";
 
     try {
         await runTerrainButtonAction(buttonElement, originalLabel, async () => {
@@ -2848,12 +2941,37 @@ function ensureMapLegendsPanel() {
             <div class="map-legend-hint">Шкала по видимым слоям рельефа</div>
         </section>
         <section id="map-legend-slope" class="map-legend-section map-legend-section-hidden">
-            <div class="map-legend-title">Уклон (SRTM), °</div>
-            <div class="map-legend-bar map-legend-bar-slope"></div>
-            <div class="map-legend-labels">
-                <span>0°</span><span>5°</span><span>10°</span><span>15°+</span>
-            </div>
-            <div class="map-legend-hint">Жёлтый — пологий, красный — крутой</div>
+            <div class="map-legend-title">Легенда уклона</div>
+            <ul class="slope-legend-list">
+                <li class="slope-legend-item">
+                    <span class="slope-legend-swatch" style="background:#4f9d4f"></span>
+                    <span class="slope-legend-text">
+                        <span class="slope-legend-range">0–3°</span>
+                        <span class="slope-legend-desc">Неэродированные или слабоэродированные пахотные земли</span>
+                    </span>
+                </li>
+                <li class="slope-legend-item">
+                    <span class="slope-legend-swatch" style="background:#f1efb4"></span>
+                    <span class="slope-legend-text">
+                        <span class="slope-legend-range">3–5°</span>
+                        <span class="slope-legend-desc">Средне- и слабоэродированные пахотные земли</span>
+                    </span>
+                </li>
+                <li class="slope-legend-item">
+                    <span class="slope-legend-swatch" style="background:#eba94f"></span>
+                    <span class="slope-legend-text">
+                        <span class="slope-legend-range">5–8°</span>
+                        <span class="slope-legend-desc">Земли со средне- и сильносмытыми почвами</span>
+                    </span>
+                </li>
+                <li class="slope-legend-item">
+                    <span class="slope-legend-swatch" style="background:#c63f2e"></span>
+                    <span class="slope-legend-text">
+                        <span class="slope-legend-range">&gt; 8°</span>
+                        <span class="slope-legend-desc">Сильноэродированные, непригодные для распашки</span>
+                    </span>
+                </li>
+            </ul>
         </section>
     `;
     document.body.appendChild(panel);

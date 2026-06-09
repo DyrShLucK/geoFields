@@ -41,7 +41,7 @@ x-python-volumes: &python-volumes
 
 x-geojson-agent-environment: &geojson-agent-environment
   OLLAMA_BASE_URL: http://ollama:11434
-  MODEL_NAME: qwen2.5:14b
+  MODEL_NAME: qwen2.5:3b
 
 x-geojson-agent-volumes: &geojson-agent-volumes
   - ./geojson-agent/data:/app/data:ro
@@ -51,7 +51,7 @@ x-geojson-agent-volumes: &geojson-agent-volumes
 services:
   minio:
     image: minio/minio:latest
-    #platform: linux/amd64
+    platform: linux/amd64
     container_name: geofields-minio
     restart: unless-stopped
     environment:
@@ -71,7 +71,7 @@ services:
 
   db:
     image: postgis/postgis:17-3.5
-    #platform: linux/amd64
+    platform: linux/amd64
     container_name: geofields-db
     restart: unless-stopped
     environment:
@@ -92,7 +92,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    #platform: linux/amd64
+    platform: linux/amd64
     container_name: geofields-redis
     restart: unless-stopped
     ports:
@@ -139,7 +139,7 @@ services:
 
   app:
     image: eclipse-temurin:21-jre-alpine
-    #platform: linux/amd64
+    platform: linux/amd64
     container_name: geofields-app
     restart: unless-stopped
     depends_on:
@@ -183,26 +183,27 @@ services:
   # Без GPU закомментируйте блок deploy / gpus — Ollama будет на CPU.
   ollama:
     image: ollama/ollama:latest
+    platform: linux/amd64
     container_name: geofields-ollama
     restart: unless-stopped
     ports:
       - "11434:11434"
     environment:
-      OLLAMA_MODEL: qwen2.5:14b
+      OLLAMA_MODEL: qwen2.5:3b
     volumes:
       - ollama_data:/root/.ollama
       - ./docker/ollama/entrypoint.sh:/entrypoint.sh:ro
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
-    gpus: all
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+#    gpus: all
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: all
+#              capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "ollama", "show", "qwen2.5:14b"]
+      test: ["CMD", "ollama", "show", "qwen2.5:3b"]
       interval: 30s
       timeout: 15s
       retries: 60
@@ -212,6 +213,7 @@ services:
     build:
       context: ./geojson-agent
       dockerfile: Dockerfile
+    platform: linux/amd64
     container_name: geofields-geojson-agent
     restart: unless-stopped
     ports:

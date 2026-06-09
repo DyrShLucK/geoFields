@@ -32,7 +32,7 @@
 
 <div class="card reports-filters-card">
     <div class="card-section-title">
-        <span class="card-section-icon card-section-icon--blue">📊</span>
+        <span class="card-section-icon card-section-icon--blue"><img th:src="@{/images/analytics.svg}" src="/images/analytics.svg" alt="" /></span>
         <h2>Параметры отчёта</h2>
     </div>
     <div class="reports-filters-grid">
@@ -66,8 +66,8 @@
     </div>
     <div class="reports-filter-actions">
         <button type="button" class="btn primary" id="btn-build-report">Сформировать отчёт</button>
-        <button type="button" class="btn" id="btn-export-pdf" disabled>📄 Скачать PDF</button>
-        <button type="button" class="btn" id="btn-layout-edit" disabled>⚙ Настроить блоки</button>
+        <button type="button" class="btn" id="btn-export-pdf" disabled>Скачать PDF</button>
+        <button type="button" class="btn" id="btn-layout-edit" disabled>Настроить блоки</button>
         <span class="muted font-sm" id="report-scope-hint"></span>
     </div>
 </div>
@@ -75,7 +75,7 @@
 <div id="dashboard" class="reports-dashboard is-collapsed">
     <div class="reports-print-header" id="report-print-header">
         <div class="reports-print-brand">
-            <span class="reports-print-logo">🌿 GeoFields</span>
+            <span class="reports-print-logo"><img th:src="@{/images/logo.svg}" src="/images/logo.svg" alt="" /> GeoFields</span>
             <span class="reports-print-title">Отчёт по полям</span>
         </div>
         <div class="reports-print-meta" id="report-print-meta"></div>

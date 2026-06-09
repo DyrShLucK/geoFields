@@ -19,7 +19,7 @@ app = FastAPI(
 
 app.include_router(ndvi_router)
 app.include_router(elevation_router)
-# Эталон пустого PNG (~334 байта): такие тайлы не отдаём клиенту, только 204 No Content
+
 EMPTY_TILE_BYTES = tiler.get_empty_bytes()
 
 app.add_middleware(
@@ -32,6 +32,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 @app.get("/tiles/{field_id}/{date}/{scene_id}/{z}/{x}/{y}.png")
 async def get_tile(
@@ -54,7 +55,6 @@ async def get_tile(
     except Exception:
         geom = None
 
-    # Локального GeoTIFF нет — пробуем скачать из MinIO (бакет geofields-ndvi)
     if not path.exists() and s3_storage.s3_enabled():
         s3_key = s3_storage.ndvi_tif_key(field_id, date, scene_id)
         s3_storage.get_file(
@@ -74,7 +74,6 @@ async def get_tile(
         field_geometry=geom
     )
 
-    # Тайл вне поля или без данных — 204, Java не кэширует такие ответы
     if tile_bytes == EMPTY_TILE_BYTES:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -88,7 +87,7 @@ async def get_elevation_tile(
     x: int,
     y: int,
 ):
-    """Этап 2: отдача тайлов рельефа с динамической шкалой высот по полю."""
+
     path = FIELDS_DIR / field_id / "elevation.tif"
 
     if not path.exists():
@@ -125,7 +124,7 @@ async def get_slope_tile(
     x: int,
     y: int,
 ):
-    """Тайлы уклона (градусы), шкала 0–15°."""
+
     path = FIELDS_DIR / field_id / "slope.tif"
 
     if not path.exists():

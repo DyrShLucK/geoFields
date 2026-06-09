@@ -28,7 +28,7 @@ def _tiles_url(field_id: str, actual_date_str: str, scene_name: str) -> dict:
 
 
 def _sync_ndvi_tif_to_s3(field_id: str, actual_date_str: str, scene_name: str, local_path: str) -> None:
-    """Синхронизация GeoTIFF в MinIO: upload только если объекта ещё нет в бакете."""
+
     if not s3_storage.s3_enabled():
         return
     bucket = s3_storage.s3_bucket_ndvi()
@@ -42,7 +42,7 @@ def _sync_ndvi_tif_to_s3(field_id: str, actual_date_str: str, scene_name: str, l
 
 
 def _mean_ndvi_from_tif(local_path: str) -> float:
-    # Для cache HIT считаем среднее прямо из существующего TIFF, чтобы не делать clip_index повторно.
+
     with rasterio.open(local_path) as src:
         data = src.read(1).astype(np.float32)
         nodata = src.nodata if src.nodata is not None else -9999.0
@@ -151,7 +151,6 @@ async def get_ndvi_by_id(field_id: str, date: str, db: Session = Depends(get_db)
             output_path=str(field_final_path)
         )
 
-        # Upload NDVI GeoTIFF to object storage (optional)
         _sync_ndvi_tif_to_s3(field_id, actual_date_str, scene_name, str(field_final_path))
 
         new_analytic = FieldAnalytic(
@@ -179,10 +178,7 @@ async def get_ndvi_by_id(field_id: str, date: str, db: Session = Depends(get_db)
 
 @router.get("/get_ndvi_tiles_for_field")
 async def get_ndvi_tiles_for_field(field_id: str, date: str, db: Session = Depends(get_db)):
-    """
-    Эндпоинт для получения URL тайлов NDVI для одного поля на конкретную дату.
-    Если данных нет, инициирует расчет.
-    """
+
     print(f"\n--- [START] Запрос NDVI-тайлов: Поле {field_id}, Дата {date} ---", flush=True)
 
     try:
@@ -261,13 +257,13 @@ async def get_ndvi_tiles_for_field(field_id: str, date: str, db: Session = Depen
             ad = str(ready_for_scene.date)
             scene_id = ready_for_scene.scene_index.scene.scene_id
             print(f"📦 Кэш HIT (field_analytics + файл): поле {field_id}, сцена {scene_name}, дата {ad}", flush=True)
-            # Файл уже есть локально — догружаем в S3, если раньше не попал (cache HIT без clip_index)
+
             _sync_ndvi_tif_to_s3(field_id, ad, scene_id, ready_for_scene.local_path)
             return _tiles_url(field_id, ad, scene_id)
 
         if field_final_path.exists():
             print(f"📦 Кэш HIT (файл на диске): {field_final_path}", flush=True)
-            # Если строка аналитики отсутствует, создаём её из готового TIFF (идемпотентно).
+
             _ensure_field_analytic(
                 db=db,
                 field_id_int=field_id_int,
@@ -315,10 +311,7 @@ async def get_ndvi_trend(
         end_date: date = Query(...),
         db: Session = Depends(get_db)
 ):
-    """
-    Эндпоинт для получения средних значений NDVI для группы полей за выбранный период
-    для построения графика тренда.
-    """
+
     print(f"\n--- [START] Запрос тренда NDVI: Поля {field_ids}, с {start_date} по {end_date} ---", flush=True)
 
     try:
@@ -352,7 +345,7 @@ async def get_ndvi_trend(
                 results[month_start.strftime("%Y-%m-%d")] = float(
                     mean_for_month) if mean_for_month is not None else None
             else:
-                results[month_start.strftime("%Y-%m-%d")] = None  # Нет данных за этот месяц
+                results[month_start.strftime("%Y-%m-%d")] = None
 
             current_date = next_month_start
 

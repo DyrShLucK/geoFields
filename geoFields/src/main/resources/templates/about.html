@@ -24,25 +24,37 @@
             margin-bottom: 40px;
         }
         .hero-logo-container {
-            margin-bottom: 16px;
+            margin-bottom: -34px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
         }
-        .hero-logo-svg {
-            width: 56px;
-            height: 56px;
-            color: #10b981;
+        .hero-logo-img {
+            width: 180px;
+            height: 180px;
+            object-fit: contain;
+            animation: hero-logo-float 5s ease-in-out infinite;
         }
-        .hero-title {
-            font-size: 38px;
+        @keyframes hero-logo-float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-8px); }
+        }
+        .hero-brand-name {
+            font-size: 52px;
             font-weight: 800;
-            letter-spacing: -1px;
-            margin: 0 0 16px 0;
-            background: linear-gradient(135deg, #10b981, #047857);
+            letter-spacing: -1.4px;
+            margin: 0 0 10px 0;
+            background: linear-gradient(120deg, #34d399 0%, #10b981 45%, #047857 100%);
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
+        }
+        .hero-title {
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin: 0 0 16px 0;
+            color: #0f172a;
         }
         .hero-desc {
             font-size: 18px;
@@ -57,21 +69,22 @@
             gap: 16px;
         }
         .btn-cta {
-            padding: 14px 28px;
-            font-size: 15px;
-            font-weight: 600;
-            border-radius: 14px;
+            padding: 18px 40px;
+            font-size: 17px;
+            font-weight: 700;
+            border-radius: 16px;
             text-decoration: none;
             transition: all 0.2s ease;
         }
         .btn-cta.primary {
-            background: #10b981;
+            background: linear-gradient(135deg, #10b981 0%, #047857 100%);
             color: white;
-            box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 14px 22px -6px rgba(16, 185, 129, 0.45);
         }
         .btn-cta.primary:hover {
-            background: #059669;
-            transform: translateY(-1px);
+            background: linear-gradient(135deg, #059669 0%, #036249 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 18px 26px -6px rgba(16, 185, 129, 0.55);
         }
         .btn-cta.secondary {
             background: white;
@@ -126,11 +139,9 @@
         <!-- Презентационный заголовок с SVG логотипом -->
         <section class="hero-section">
             <div class="hero-logo-container">
-                <svg class="hero-logo-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M22 2c0 0-4 1-8 5s-5 8-5 8s-3 1-5 0c0 0 2-3 5-5s5-3 5-3"></path>
-                    <path d="M14 10s-1 5-5 9s-9 5-9 5s2-3 5-5s4-4 4-4"></path>
-                </svg>
+                <img class="hero-logo-img" th:src="@{/images/logo.svg}" src="/images/logo.svg" alt="Агроситуация" />
             </div>
+            <div class="hero-brand-name">Агроситуация</div>
             <h1 class="hero-title">Умный агромониторинг нового поколения</h1>
             <p class="hero-desc">
                 Интуитивно понятная платформа мониторинга вегетации, отслеживания севооборота и управления земельным фондом предприятия.

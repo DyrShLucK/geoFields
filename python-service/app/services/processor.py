@@ -3,33 +3,27 @@ import rasterio.mask
 import numpy as np
 
 
-# ФУНКЦИЯ 1: Расчет индекса для всего снимка
 def calculate_full_index(source_path, output_path, red_band=3, nir_band=4):
     with rasterio.open(source_path) as src:
-        # Читаем каналы (в Rasterio нумерация с 1)
         red = src.read(3)  # B4
         nir = src.read(4)  # B8
 
-        # Защита от деления на 0
         denom = (nir + red)
         ndvi = np.where(denom == 0, np.nan, (nir - red) / (denom + 1e-10))
         ndvi = np.clip(ndvi, -1, 1)
 
-        # Для хранения на диске заменяем NaN на NoData значение
         ndvi_out = np.nan_to_num(ndvi, nan=-9999.0)
 
-        # Копируем метаданные источника
         meta = src.meta.copy()
 
-        # ВАЖНО: Обновляем только то, что изменилось
         meta.update({
             "driver": "GTiff",
             "count": 1,
             "dtype": "float32",
             "nodata": -9999.0,
-            "crs": src.crs if src.crs else "EPSG:4326",  # Гарантируем наличие CRS
+            "crs": src.crs if src.crs else "EPSG:4326",
             "transform": src.transform,
-            "compress": "lzw"  # Сжатие, чтобы файл весил меньше
+            "compress": "lzw"
         })
 
         with rasterio.open(output_path, "w", **meta) as dst:
@@ -46,7 +40,6 @@ def clip_index(source_index_path, geometry_dict, output_path):
 
         try:
 
-            # ОБРЕЗКА ПО ПОЛИГОНУ
             out_image, out_transform = rasterio.mask.mask(
                 src,
                 [geometry_dict],
@@ -58,7 +51,6 @@ def clip_index(source_index_path, geometry_dict, output_path):
 
             data = out_image[0].astype(np.float32)
 
-            # СРЕДНИЙ NDVI
             valid_data = data[data != NODATA]
 
             if valid_data.size > 0:
@@ -66,7 +58,6 @@ def clip_index(source_index_path, geometry_dict, output_path):
             else:
                 mean_val = 0.0
 
-            # МЕТАДАННЫЕ
             meta = src.meta.copy()
 
             meta.update({
@@ -80,12 +71,10 @@ def clip_index(source_index_path, geometry_dict, output_path):
                 "compress": "lzw"
             })
 
-            # СОХРАНЕНИЕ
             with rasterio.open(output_path, "w", **meta) as dst:
 
                 dst.write(data, 1)
 
-                # ALPHA MASK
                 alpha_mask = np.where(
                     data == NODATA,
                     0,
@@ -104,16 +93,12 @@ def clip_index(source_index_path, geometry_dict, output_path):
 
 
 def generate_slope_raster(elevation_path, output_slope_path):
-    """
-    Расчёт карты уклонов (градусы) из GeoTIFF высот.
-    NoData (-9999) не участвует в градиенте и сохраняется в выходном файле.
-    """
+
     with rasterio.open(elevation_path) as src:
         elev = src.read(1).astype(np.float32)
         nodata = src.nodata if src.nodata is not None else NODATA
         transform = src.transform
 
-        # Размер пикселя в единицах CRS; для WGS84 переводим градусы в метры.
         px_x = abs(transform.a)
         px_y = abs(transform.e)
         if src.crs and src.crs.is_geographic:
@@ -123,7 +108,6 @@ def generate_slope_raster(elevation_path, output_slope_path):
         valid = np.isfinite(elev) & (elev != nodata)
         elev_work = np.where(valid, elev, np.nan)
 
-        # numpy.gradient: (d/dy, d/dx) с учётом шага сетки в метрах.
         dy, dx = np.gradient(elev_work, px_y, px_x)
         slope_deg = np.degrees(np.arctan(np.sqrt(dx ** 2 + dy ** 2)))
 
