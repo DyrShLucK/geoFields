@@ -1886,6 +1886,9 @@ function setupFilterControls() {
         if (highlightedFieldId != null) {
             setFieldFeatureState(highlightedFieldId, { highlight: true });
         }
+        if (isMobileMapLayout()) {
+            closeMapOverlayPanels();
+        }
     });
 
     btnReset?.addEventListener("click", () => {
@@ -1925,6 +1928,90 @@ function setupImportModal() {
 }
 
 // =====================================================
+// ПАНЕЛИ ФИЛЬТРОВ И СЛОЁВ (оверлей + backdrop на мобильных)
+// =====================================================
+const MAP_OVERLAY_PANELS = [
+    { id: "filter-panel", toggleId: "filter-toggle" },
+    { id: "layers-panel", toggleId: "layers-toggle" }
+];
+
+function isMobileMapLayout() {
+    return window.matchMedia("(max-width: 768px)").matches;
+}
+
+function getOpenMapOverlayPanel() {
+    return MAP_OVERLAY_PANELS
+        .map(({ id }) => document.getElementById(id))
+        .find(el => el?.classList.contains("open")) || null;
+}
+
+function syncMapPanelBackdrop() {
+    const backdrop = document.getElementById("map-panel-backdrop");
+    const openPanel = getOpenMapOverlayPanel();
+    const isOpen = !!openPanel;
+
+    backdrop?.classList.toggle("is-visible", isOpen);
+    backdrop?.setAttribute("aria-hidden", String(!isOpen));
+    document.body.classList.toggle("map-panels-open", isOpen && isMobileMapLayout());
+
+    MAP_OVERLAY_PANELS.forEach(({ id }) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el === openPanel) {
+            el.setAttribute("aria-modal", "true");
+        } else {
+            el.removeAttribute("aria-modal");
+        }
+    });
+}
+
+function closeMapOverlayPanels() {
+    MAP_OVERLAY_PANELS.forEach(({ id }) => {
+        document.getElementById(id)?.classList.remove("open");
+    });
+    syncMapPanelBackdrop();
+    syncMapFloatingButtons();
+}
+
+function openMapOverlayPanel(panelId) {
+    MAP_OVERLAY_PANELS.forEach(({ id }) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.classList.toggle("open", id === panelId);
+    });
+    syncMapPanelBackdrop();
+    syncMapFloatingButtons();
+}
+
+function toggleMapOverlayPanel(panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
+    if (panel.classList.contains("open")) {
+        closeMapOverlayPanels();
+    } else {
+        openMapOverlayPanel(panelId);
+    }
+}
+
+let mapPanelGlobalHandlersBound = false;
+
+function bindMapPanelGlobalHandlers() {
+    if (mapPanelGlobalHandlersBound) return;
+    mapPanelGlobalHandlersBound = true;
+
+    document.getElementById("map-panel-backdrop")?.addEventListener("click", closeMapOverlayPanels);
+    document.getElementById("filter-close")?.addEventListener("click", closeMapOverlayPanels);
+    document.getElementById("layers-close")?.addEventListener("click", closeMapOverlayPanels);
+
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && getOpenMapOverlayPanel()) {
+            e.preventDefault();
+            closeMapOverlayPanels();
+        }
+    });
+}
+
+// =====================================================
 // НАВИГАЦИЯ И БОКОВЫЕ ПАНЕЛИ
 // =====================================================
 // =====================================================
@@ -1954,15 +2041,14 @@ function setupSidebarAndPanels() {
 
     setupAnalyticsPanelResize();
     ensureFieldHistoryPanel();
+    bindMapPanelGlobalHandlers();
 
     document.getElementById("layers-toggle")?.addEventListener("click", () => {
-        document.getElementById("layers-panel")?.classList.toggle("open");
-        syncMapFloatingButtons();
+        toggleMapOverlayPanel("layers-panel");
     });
 
     document.getElementById("filter-toggle")?.addEventListener("click", () => {
-        document.getElementById("filter-panel")?.classList.toggle("open");
-        syncMapFloatingButtons();
+        toggleMapOverlayPanel("filter-panel");
     });
 
     document.getElementById("btn-fit-bounds")?.addEventListener("click", () => {

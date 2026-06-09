@@ -952,6 +952,75 @@ body, html {
     border-left: 4px solid #10b981;
 }
 
+.map-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1990;
+    background: rgba(15, 23, 42, 0.45);
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.25s ease, visibility 0.25s ease;
+}
+
+.map-panel-backdrop.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+
+body.map-panels-open {
+    overflow: hidden;
+    touch-action: none;
+}
+
+.map-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: -4px -4px 14px;
+    padding: 4px 4px 10px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: white;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.map-panel-header .filter-title,
+.map-panel-header .panel-title {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 0;
+}
+
+.map-panel-close {
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 12px;
+    background: #f1f5f9;
+    color: #334155;
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+
+.map-panel-close:hover {
+    background: #e2e8f0;
+}
+
+.map-panel-close:active {
+    background: #cbd5e1;
+}
+
 .panel-title, .filter-title {
     font-size: 16px;
     font-weight: 700;
@@ -2575,17 +2644,35 @@ rect.rain-bar:hover {
         padding: 18px;
     }
 
-    /* --- Панели слоёв и фильтрации не выходят за рамки --- */
+    /* --- Панели слоёв и фильтрации: нижний лист на мобильных --- */
     .layers-panel,
     .filter-panel {
-        top: 84px;
-        left: 12px !important;
-        right: 12px !important;
-        width: auto !important;
+        top: auto !important;
+        bottom: 0;
+        left: 0 !important;
+        right: 0 !important;
+        width: 100% !important;
         max-width: none;
-        max-height: 72vh;
+        max-height: min(85vh, calc(100dvh - 64px));
+        border-radius: 20px 20px 0 0;
+        transform: translateY(100%);
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+
+    .layers-panel.open,
+    .filter-panel.open {
+        transform: translateY(0);
+    }
+
+    .filter-actions {
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        background: linear-gradient(to top, #fff 78%, rgba(255, 255, 255, 0));
+        padding-top: 12px;
+        margin-top: 8px;
     }
 
     /* --- Панель аналитики на всю ширину экрана --- */
@@ -2659,8 +2746,7 @@ rect.rain-bar:hover {
     }
     .layers-panel,
     .filter-panel {
-        top: 72px;
-        max-height: 68vh;
+        max-height: min(88vh, calc(100dvh - 56px));
     }
     .brand-title {
         font-size: 14px;

@@ -107,9 +107,14 @@
     <!-- Интерактивный всплывающий тултип для графиков -->
     <div id="chart-tooltip" class="chart-tooltip"></div>
 
+    <div class="map-panel-backdrop" id="map-panel-backdrop" aria-hidden="true"></div>
+
     <!-- Панель управления слоями карты -->
-    <div class="layers-panel" id="layers-panel">
-        <div class="panel-title">Слои карты</div>
+    <div class="layers-panel" id="layers-panel" role="dialog" aria-labelledby="layers-panel-title">
+        <div class="map-panel-header">
+            <div class="panel-title" id="layers-panel-title">Слои карты</div>
+            <button type="button" class="map-panel-close" id="layers-close" aria-label="Закрыть панель слоёв">×</button>
+        </div>
         <div class="group-title">Базовая подложка</div>
         <label class="radio-row">
             <input type="radio" name="base-layer" value="google" checked="checked" />
@@ -157,8 +162,11 @@
     </div>
 
     <!-- Расширенная панель фильтров -->
-    <div class="filter-panel" id="filter-panel">
-        <div class="filter-title">Параметры фильтрации</div>
+    <div class="filter-panel" id="filter-panel" role="dialog" aria-labelledby="filter-panel-title">
+        <div class="map-panel-header">
+            <div class="filter-title" id="filter-panel-title">Параметры фильтрации</div>
+            <button type="button" class="map-panel-close" id="filter-close" aria-label="Закрыть панель фильтров">×</button>
+        </div>
         
         <!-- Выбор отдельных полей -->
         <div class="filter-group">
